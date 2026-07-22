@@ -1,0 +1,53 @@
+# ===== 运行时数据(可重建,不进 git)=====
+# 收藏夹(本地缓存,丢了不影响功能)
+favorites.json
+# 调试中间产物
+_ai_req.json
+_ai_video_req.json
+*.tmp
+
+# ===== 日志(daemon/server 输出,本地诊断用)=====
+server.out
+server.err
+daemon.out
+daemon.err
+*.log
+
+# ===== 缩略图缓存(PIL 运行时生成)=====
+thumbs/
+__thumbs__/
+.cache/
+
+# ===== 数据库(SQLite 文件 + 备份)=====
+# PictureDb.db 是兄弟模块共用的,不能进本仓库
+PictureDb.db
+*.db-journal
+*.db-wal
+*.db-shm
+# 备份
+*.bak
+*.db.bak
+
+# ===== Python 缓存 =====
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ===== 编辑器 / 系统垃圾 =====
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+$RECYCLE.BIN/
+
+# ===== 项目特定:被替换的启动器(start_hidden.vbs 路径写错)=====
+# Issue #1 修完之后取消注释
+# start_hidden.vbs

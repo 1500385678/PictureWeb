@@ -1,0 +1,8 @@
+{
+  "issue_number": 12,
+  "issue_title": "[P1] 测试 daily_pipeline 接入",
+  "issue_body": "由 Architect Agent 创建,用于测试 daily_pipeline 自动抓取/修改/测试/发布全流程。\n\n---\n\n> 由 feedback.py 创建",
+  "issue_url": "https://github.com/1500385678/PictureWebWorkflowtest/issues/12",
+  "attempts": 0,
+  "queued_at": "2026-07-21T21:20:21"
+}

@@ -1,0 +1,8 @@
+{
+  "issue_number": 1,
+  "issue_title": "[P0][bug] start_hidden.vbs ????,???????",
+  "issue_body": "## ??\n`start_hidden.vbs:3-4`\n\n## ??\n```vbs\nWshShell.CurrentDirectory = \"D:\\Mac\\Mac\\workteam\\05_space\\03_architect\\_ArchitectLib\\PictureWeb\"\nWshShell.Run \"\"\"...\\python.exe\"\" -X utf8 \"\"...\\PictureWeb\\server.py\"\"\"\n```\n\n## ??\n????? `_ArchitectLib\\PictureWeb`,?????? `Mobile\\_ArchitectMobileLib\\PictureWebWorkflowtest`?**?? vbs ??????\"?????\"**?\n\n## ??\n?? P0,Windows ????????\n\n## ????\n?????:\n```vbs\nSet fso = CreateObject(\"Scripting.FileSystemObject\")\nscriptDir = fso.GetParentFolderName(WScript.ScriptFullName)\nWshShell.CurrentDirectory = scriptDir\nWshShell.Run \"python.exe -X utf8 \"\"\" & scriptDir & \"\\server.py\"\"\", 0, False\n```\n?? vbs ??????????",
+  "issue_url": "https://github.com/1500385678/PictureWebWorkflowtest/issues/1",
+  "attempts": 0,
+  "queued_at": "2026-07-21T21:20:22"
+}

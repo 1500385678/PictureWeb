@@ -1,0 +1,343 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="UTF-8">
+<title>PictureWeb</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #1a1a1a; color: #eaeaea; min-height: 100vh; }
+header { background: #222; padding: 10px 20px; border-bottom: 1px solid #333; position: sticky; top: 0; z-index: 10; }
+h1 { font-size: 16px; font-weight: 500; margin-bottom: 6px; color: #fff; display: inline-block; margin-right: 16px; }
+.search-box { display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; overflow-x: auto; }
+.search-box input, .search-box select { background: #2a2a2a; border: 1px solid #3a3a3a; color: #eaeaea; padding: 5px 8px; border-radius: 4px; font-size: 13px; }
+.search-box select { width: 150px; flex: 0 0 150px; }
+.search-box input { flex: 1 1 140px; min-width: 120px; }
+.search-box input:focus, .search-box select:focus { outline: none; border-color: #ff9e4a; }
+.search-box button { background: #ff9e4a; color: #fff; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap; }
+.search-box button:hover { background: #ffb370; }
+.btn-secondary { background: #3a3a3a !important; }
+.btn-secondary:hover { background: #4a4a4a !important; }
+.btn-toggle { background: #3a3a3a !important; }
+.btn-toggle.active { background: #ff9e4a !important; }
+.keywords-box { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
+.kw-tag { background: #ff9e4a; color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; cursor: pointer; }
+.kw-tag:hover { background: #ff6b6b; }
+.facets { background: #252525; padding: 12px 32px; border-bottom: 1px solid #333; display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; }
+.facet-group { display: flex; align-items: center; gap: 6px; }
+.facet-label { color: #888; }
+.facet-chip { background: #2a2a2a; color: #ccc; padding: 3px 10px; border-radius: 12px; cursor: pointer; }
+.facet-chip:hover { background: #3a3a3a; color: #fff; }
+.facet-chip.active { background: #ff9e4a; color: #fff; }
+.main { padding: 20px 32px; }
+.result-meta { color: #888; font-size: 13px; margin-bottom: 16px; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
+.card { background: #2a2a2a; border-radius: 4px; overflow: hidden; cursor: pointer; transition: transform 0.15s; position: relative; }
+.card:hover { transform: translateY(-2px); }
+.card img { width: 100%; height: 200px; object-fit: cover; display: block; background: #1a1a1a; }
+.card-body { padding: 8px 12px; font-size: 12px; color: #aaa; }
+.card-title { color: #ddd; font-size: 13px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
+.tag { background: #333; color: #aaa; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
+.fav-btn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; }
+.fav-btn.active { color: #ff6b6b; }
+.sim-badge { position: absolute; top: 8px; left: 8px; background: rgba(255, 158, 74, 0.9); color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+.view-badge { position: absolute; bottom: 8px; left: 8px; background: rgba(255, 158, 74, 0.9); color: #fff; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold; }
+.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 100; align-items: center; justify-content: center; padding: 32px; }
+.modal.open { display: flex; }
+.modal img { max-width: 90%; max-height: 80vh; object-fit: contain; }
+.modal-info { color: #ccc; margin-top: 16px; max-width: 90%; }
+.modal-close { position: fixed; top: 20px; right: 32px; color: #fff; font-size: 28px; cursor: pointer; background: none; border: none; }
+.upload-area { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 200; display: none; align-items: center; justify-content: center; flex-direction: column; }
+.upload-area.open { display: flex; }
+.upload-box { border: 2px dashed #555; border-radius: 8px; padding: 60px; text-align: center; color: #888; }
+.upload-box.dragover { border-color: #ff9e4a; color: #fff; }
+.upload-box input { display: none; }
+.loading { color: #888; padding: 40px; text-align: center; }
+.tab-bar { display: flex; gap: 8px; margin-top: 4px; }
+.tab { background: #2a2a2a; color: #ccc; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; }
+.tab.active { background: #ff9e4a; color: #fff; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PictureWeb</h1>
+  <div class="search-box">
+    <input id="q" type="text" placeholder="搜索关键词，如：黄昏鸟瞰、住宅、教堂..." autofocus>
+    <select id="project"><option value="">全部项目</option></select>
+    <select id="scene"><option value="">全部场景</option></select>
+    <select id="light"><option value="">全部光线</option></select>
+    <select id="mood"><option value="">全部氛围</option></select>
+    <select id="arch"><option value="">全部类型</option></select>
+    <select id="company"><option value="">全部渲染公司</option></select>
+    <select id="view"><option value="">全部视角</option></select>
+    <button onclick="search()">搜索</button>
+    <button class="btn-secondary" onclick="openUpload()">上传搜图</button>
+    <button class="btn-toggle" id="fav-toggle" onclick="toggleFavMode()">★ 收藏</button>
+  </div>
+  <div class="keywords-box" id="kw-box">
+    <span style="color:#888;font-size:12px">多关键词：</span>
+    <input id="kw-input" type="text" placeholder="输入后回车添加（多个 AND 关系）" style="background:#1a1a1a;border:1px solid #3a3a3a;color:#eaeaea;padding:4px 10px;border-radius:12px;font-size:12px;width:200px">
+  </div>
+  <div class="tab-bar">
+    <div class="tab active" data-mode="normal" onclick="setMode('normal')">普通搜</div>
+    <div class="tab" data-mode="sim" onclick="setMode('sim')">相似图</div>
+    <div class="tab" data-mode="sem" onclick="setMode('sem')">AI 语义</div>
+  </div>
+</header>
+<div class="facets" id="facets"></div>
+<div class="main">
+  <div class="result-meta" id="meta">输入关键词开始搜索</div>
+  <div class="grid" id="grid"></div>
+</div>
+<div class="modal" id="modal" onclick="closeModal()">
+  <button class="modal-close">×</button>
+  <div style="text-align:center">
+    <img id="modal-img">
+    <div class="modal-info" id="modal-info"></div>
+  </div>
+</div>
+<div class="upload-area" id="upload-area" onclick="if(event.target===this)closeUpload()">
+  <div class="upload-box" id="drop-zone">
+    <p style="font-size:18px;margin-bottom:12px">拖拽图片到此处，或</p>
+    <label style="background:#ff9e4a;color:#fff;padding:8px 20px;border-radius:4px;cursor:pointer">
+      选择文件
+      <input type="file" accept="image/*" onchange="handleFile(this.files[0])">
+    </label>
+  </div>
+  <p style="color:#888;margin-top:16px">基于 phash 找视觉相似图（无 AI 嵌入）</p>
+</div>
+
+<script>
+let facets = {};
+let keywords = [];
+let favs = [];
+let mode = 'normal';
+let favOnlyMode = false;
+
+async function init() {
+  const r = await fetch('/api/facets');
+  facets = await r.json();
+  fillSelect('project', facets.projects);
+  fillSelect('arch', facets.archs || []);
+  fillSelect('company', facets.companies || []);
+  fillSelect('view', (facets.view_types || []).map(v => ({value: v, label: v === 'bird-eye' ? '鸟瞰' : v === 'eye-level' ? '人视' : v === 'other' ? '其他' : v})));
+  fillSelect('scene', facets.scenes);
+  fillSelect('light', facets.lights);
+  fillSelect('mood', facets.moods);
+  const fr = await fetch('/api/favorites');
+  const fd = await fr.json();
+  favs = fd.favorites;
+  updateFavBtns();
+  search();
+}
+
+function fillSelect(id, items) {
+  const sel = document.getElementById(id);
+  sel.innerHTML = '<option value="">全部' + sel.id + '</option>';
+  items.forEach(v => {
+    const opt = document.createElement('option');
+    opt.value = v;
+    opt.textContent = v.length > 30 ? v.substring(0, 30) + '…' : v;
+    sel.appendChild(opt);
+  });
+}
+
+function renderKeywords() {
+  const box = document.getElementById('kw-box');
+  // keep label + input
+  Array.from(box.querySelectorAll('.kw-tag')).forEach(n => n.remove());
+  keywords.forEach((k, i) => {
+    const t = document.createElement('span');
+    t.className = 'kw-tag';
+    t.textContent = k + ' ×';
+    t.onclick = () => { keywords.splice(i, 1); renderKeywords(); search(); };
+    box.insertBefore(t, document.getElementById('kw-input'));
+  });
+}
+
+document.getElementById('kw-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter' && e.target.value.trim()) {
+    keywords.push(e.target.value.trim());
+    e.target.value = '';
+    renderKeywords();
+    search();
+  }
+});
+
+function updateFavBtns() {
+  document.querySelectorAll('.fav-btn').forEach(btn => {
+    const id = parseInt(btn.dataset.id);
+    btn.classList.toggle('active', favs.includes(id));
+  });
+}
+
+async function toggleFav(id) {
+  const r = await fetch('/api/favorites', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({id})
+  });
+  const d = await r.json();
+  favs = d.favorites;
+  updateFavBtns();
+  if (favOnlyMode) search();
+}
+
+function toggleFavMode() {
+  favOnlyMode = !favOnlyMode;
+  document.getElementById('fav-toggle').classList.toggle('active', favOnlyMode);
+  search();
+}
+
+function setMode(m) {
+  mode = m;
+  document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
+  document.getElementById('q').placeholder = m === 'sim' ? 'phash 视觉相似需要上传图...' : (m === 'sem' ? 'AI 语义搜：输入"黄昏鸟瞰住宅"自动找相似图...' : '搜索关键词...');
+}
+
+async function search() {
+  const q = document.getElementById('q').value;
+  const project = document.getElementById('project').value;
+  const scene = document.getElementById('scene').value;
+  const light = document.getElementById('light').value;
+  const mood = document.getElementById('mood').value;
+  const arch = document.getElementById('arch').value;
+  const company = document.getElementById('company').value;
+  const view = document.getElementById('view').value;
+  const grid = document.getElementById('grid');
+  const meta = document.getElementById('meta');
+  grid.innerHTML = '<div class="loading">搜索中…</div>';
+
+  if (mode === 'sem' && q) {
+    const r = await fetch('/api/semantic_search?q=' + encodeURIComponent(q));
+    const data = await r.json();
+    meta.textContent = 'AI 语义搜 "' + q + '" → ' + data.count + ' 张结果';
+    renderCards(data.items);
+    return;
+  }
+
+  const params = new URLSearchParams();
+  if (q) params.set('q', q);
+  if (keywords.length) params.set('keywords', keywords.join(','));
+  if (project) params.set('project', project);
+  if (scene) params.set('scene', scene);
+  if (light) params.set('light', light);
+  if (mood) params.set('mood', mood);
+  if (arch) params.set('arch', arch);
+  if (company) params.set('company', company);
+  if (view) params.set('view', view);
+  if (favOnlyMode) params.set('favs_only', '1');
+  const r = await fetch('/api/search?' + params);
+  const data = await r.json();
+  meta.textContent = '共 ' + data.count + ' 张结果' + (favOnlyMode ? '（收藏夹）' : '') + (keywords.length ? ' | 关键词: ' + keywords.join(', ') : '');
+  renderCards(data.items);
+}
+
+function renderCards(items) {
+  const grid = document.getElementById('grid');
+  if (!items || items.length === 0) {
+    grid.innerHTML = '<div class="loading">无匹配结果</div>';
+    return;
+  }
+  grid.innerHTML = '';
+  items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const tagsHtml = (item.scene||'').split(';').map(t=>t.trim()).filter(Boolean).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
+    const simHtml = item.similarity !== undefined ? `<div class="sim-badge">相似 ${item.similarity}%</div>` : '';
+    const viewHtml = item.view_type === 'bird-eye' ? '<div class="view-badge">鸟瞰</div>' : item.view_type === 'eye-level' ? '<div class="view-badge">人视</div>' : (item.view_type === 'other' ? '<div class="view-badge">其他</div>' : '');
+    const favActive = favs.includes(item.id) ? 'active' : '';
+    card.innerHTML = `
+      ${simHtml}
+      ${viewHtml}
+      <button class="fav-btn ${favActive}" data-id="${item.id}" onclick="event.stopPropagation(); toggleFav(${item.id})">${favs.includes(item.id) ? '★' : '☆'}</button>
+      <img src="${item.url}" onerror="this.style.opacity=0.3">
+      <div class="card-body">
+        <div class="card-title">${item.filename}</div>
+        <div>${item.project}</div>
+        <div class="tags">${tagsHtml}</div>
+      </div>
+    `;
+    card.onclick = () => openModal(item);
+    grid.appendChild(card);
+  });
+}
+
+function openModal(item) {
+  document.getElementById('modal-img').src = item.url;
+  const favHtml = `<button class="fav-btn ${favs.includes(item.id)?'active':''}" style="position:static;width:auto;padding:6px 14px;border-radius:4px;margin-top:8px" onclick="toggleFav(${item.id}); this.textContent='${favs.includes(item.id)?'★ 取消收藏':'☆ 收藏'}'">${favs.includes(item.id)?'★ 取消收藏':'☆ 收藏'}</button>`;
+  document.getElementById('modal-info').innerHTML = `
+    <div style="font-size:18px;color:#fff;margin-bottom:8px">${item.filename}</div>
+    <div>项目: ${item.project}</div>
+    <div>场景: ${item.scene||'-'} | 光线: ${item.light||'-'} | 氛围: ${item.mood||'-'}</div>
+    <div>空间: ${item.space||'-'} | 材料: ${item.material||'-'}</div>
+    <div style="color:#888;margin-top:6px">路径: ${item.path}</div>
+    ${favHtml}
+  `;
+  document.getElementById('modal').classList.add('open');
+}
+
+function closeModal() { document.getElementById('modal').classList.remove('open'); }
+
+function openUpload() {
+  document.getElementById('upload-area').classList.add('open');
+  document.getElementById('drop-zone').classList.remove('dragover');
+}
+function closeUpload() { document.getElementById('upload-area').classList.remove('open'); }
+
+const dropZone = document.getElementById('drop-zone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('dragover');
+  if (e.dataTransfer.files.length) handleFile(e.dataTransfer.files[0]);
+});
+
+async function handleFile(f) {
+  if (!f) return;
+  const b64 = await new Promise((res, rej) => {
+    const r = new FileReader();
+    r.onload = e => res(e.target.result);
+    r.onerror = rej;
+    r.readAsDataURL(f);
+  });
+  const grid = document.getElementById('grid');
+  const meta = document.getElementById('meta');
+  grid.innerHTML = '<div class="loading">上传中…</div>';
+  const r = await fetch('/api/upload_search', {
+    method: 'POST', headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({image: b64})
+  });
+  const data = await r.json();
+  closeUpload();
+  meta.textContent = '上传图 ' + (f.name||'') + ' → 共 ' + data.count + ' 张相似图';
+  if (data.error) {
+    grid.innerHTML = '<div class="loading">' + data.error + '</div>';
+    return;
+  }
+  // 复用 search 渲染
+  grid.innerHTML = '';
+  data.items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'card';
+    const tagsHtml = (item.scene||'').split(';').map(t=>t.trim()).filter(Boolean).slice(0,3).map(t=>`<span class="tag">${t}</span>`).join('');
+    card.innerHTML = `
+      <div class="sim-badge">相似 ${item.similarity}%</div>
+      <img src="${item.url}">
+      <div class="card-body">
+        <div class="card-title">${item.filename}</div>
+        <div>${item.project}</div>
+        <div class="tags">${tagsHtml}</div>
+      </div>
+    `;
+    card.onclick = () => openModal(item);
+    grid.appendChild(card);
+  });
+}
+
+document.getElementById('q').addEventListener('keydown', e => { if (e.key === 'Enter') search(); });
+document.querySelectorAll('select').forEach(s => s.addEventListener('change', search));
+init();
+</script>
+</body>
+</html>

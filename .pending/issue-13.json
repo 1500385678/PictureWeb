@@ -1,0 +1,8 @@
+{
+  "issue_number": 13,
+  "issue_title": "[P2] 测试 issue #13 · 验证 auto-fix 派单",
+  "issue_body": "第二条测试 issue,用于验证 daily_pipeline / auto_dispatch 自动派单功能。\n\n---\n\n> 由 feedback.py 创建",
+  "issue_url": "https://github.com/1500385678/PictureWebWorkflowtest/issues/13",
+  "attempts": 0,
+  "queued_at": "2026-07-21T21:20:21"
+}

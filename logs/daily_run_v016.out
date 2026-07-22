@@ -1,0 +1,67 @@
+[2026-07-21T21:21:40] ============================================================
+[2026-07-21T21:21:40] Daily Pipeline 启动 · 模式:REAL
+[2026-07-21T21:21:40] 1) auto_dispatch.py
+[2026-07-21T21:21:43] === 3-Agent Dispatcher ===
+仓库: 1500385678/PictureWebWorkflowtest
+扫 label: auto-fix
+模式: REAL
+回流上限: 3 次
+
+找到 3 个待办:
+  #13 [P2] 测试 issue #13 · 验证 auto-fix 派单
+  #12 [P1] 测试 daily_pipeline 接入
+  #1 [P0][bug] start_hidden.vbs ????,???????
+
+=== 派 Fixer agent 处理 #13: [P2] 测试 issue #13 · 验证 auto-fix 派单 ===
+  → 首次处理(无关联 PR)
+  → 写入待办:D:\Mac\Mac\Mac\workteam\05_space\03_architect\Mobile\_ArchitectMobileLib\PictureWebWorkflowtest\scripts\..\.pending\issue-13.json
+  (生产模式:此处调 mavis task 启 Fixer agent 改代码)
+
+=== 派 Fixer agent 处理 #12: [P1] 测试 daily_pipeline 接入 ===
+  → 首次处理(无关联 PR)
+  → 写入待办:D:\Mac\Mac\Mac\worktea
+[2026-07-21T21:21:43] 2) Fixer agent: .pending/ 有 3 个待办
+[2026-07-21T21:21:43]    - issue-1.json
+[2026-07-21T21:21:43]    - issue-12.json
+[2026-07-21T21:21:43]    - issue-13.json
+[2026-07-21T21:21:43]    ✅ .pending/.processed 标记存在,Fixer 已处理(用户驱动模式)
+[2026-07-21T21:21:43] 3) auto_tester.py --local
+[2026-07-21T21:21:44]    起 server.py ...
+[2026-07-21T21:21:46] === 3-Agent Tester ===
+仓库: 1500385678/PictureWebWorkflowtest
+  测试当前 working tree
+
+[跑 smoke]
+✅ facets                    /api/facets                         200 bytes=2578
+✅ favorites                 /api/favorites                      200 bytes=40
+✅ search                    /api/search?limit=3                 200 bytes=1831
+
+✅ 3/3 endpoints OK
+
+
+
+结果: 3/3
+
+[2026-07-21T21:21:46] 4) auto_release.py --bump patch
+[2026-07-21T21:21:47] [main 67c8645] release: bump to v0.1.5
+ 1 file changed, 1 insertion(+), 1 deletion(-)
+=== Auto Release ===
+当前版本: v0.1.4
+新版本:   v0.1.5
+bump:     patch
+模式:     REAL
+
+1. 改 __version__.py
+  ✅ __version__.py → "0.1.5"
+
+2. 收集 changelog(最近 PR)
+
+3. commit + tag + push
+
+[2026-07-21T21:21:47]    ❌ release 失败: fatal: tag 'v0.1.5' already exists
+Traceback (most recent call last):
+  File "D:\Mac\Mac\Mac\workteam\05_space\03_architect\Mobile\_ArchitectMobileLib\PictureWebWorkflowtest\scripts\auto_release.py", line 258, in <module>
+    sys.exit(main())
+             ^^^^^^
+  File "D:\Mac\Mac\Mac\workteam\05_sp
+[2026-07-21T21:21:47] Pipeline 失败:release

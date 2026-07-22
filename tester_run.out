@@ -1,0 +1,5 @@
+Library 启动: http://127.0.0.1:8081/
+           局域网: http://192.168.181.136:8081/  (需同网段)
+DB: D:/Mac/Mac/workteam/05_space/03_architect\_ArchitectLib\PictureDb\PictureDb.db
+IMG_ROOT: D:/Mac/Mac/workteam/05_space/03_architect\Mobile
+并发上限: 20 个连接
