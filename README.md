@@ -65,6 +65,7 @@ PictureWeb/
 
 | 日期 | 变更 | 触发 |
 |------|------|------|
+| 2026-07-22 | patch → v2.0.2 + server.py load_favs/save_favs 用 with 块 + 改 except 类型 | 修小问题 |
 | 2026-07-22 | 重大升级 → v2.0.0 + daily_pipeline 端口/日志/环境变量重构 | 用户手动指定 |
 | 2026-07-21 | git init + .gitignore + README(本文件) | 接入 3-agent 流水线试点 |
 | 2026-06-27 | 创建 libraryControl 文件 | 初版 |
@@ -72,6 +73,7 @@ PictureWeb/
 
 ## 验收日志
 
+- 2026-07-22 · v2.0.2 · patch: server.py load_favs/save_favs 用 with 块, 修 bare except 吞所有异常
 - 2026-07-22 · v2.0.0 · 跨 major 升级 + daily_pipeline 端口自适应(8081/9001)+ PICTUREWEB_TEST_PORT 环境变量 + server 启停改用日志文件
 - 2026-07-21 · v0.1.0 · 3-Agent 流水线首次跑通(PR #9 + #10)
 - 2026-07-21 · Phase 6 自动化骨架完成(feedback / dispatch / tester / release)

@@ -27,14 +27,17 @@ active_lock = Lock()
 active_count = 0
 
 def load_favs():
-    if os.path.exists(FAV_FILE):
-        try:
-            return json.load(open(FAV_FILE, 'r', encoding='utf-8'))
-        except: return []
-    return []
+    if not os.path.exists(FAV_FILE):
+        return []
+    try:
+        with open(FAV_FILE, 'r', encoding='utf-8') as f:
+            return json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return []
 
 def save_favs(favs):
-    json.dump(favs, open(FAV_FILE, 'w', encoding='utf-8'), ensure_ascii=False, indent=2)
+    with open(FAV_FILE, 'w', encoding='utf-8') as f:
+        json.dump(favs, f, ensure_ascii=False, indent=2)
 
 def to_img_url(abs_path):
     """将绝对路径转为 /img/ 相对 URL（兼容旧 Mac 路径）"""
