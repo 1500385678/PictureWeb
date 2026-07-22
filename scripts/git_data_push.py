@@ -14,6 +14,16 @@ import urllib.request
 API_BASE = 'https://api.github.com'
 REPO = os.environ.get('PICTUREWEB_REPO', '1500385678/PictureWebWorkflowtest')
 TOKEN = os.environ.get('GH_TOKEN', '')
+# fallback: 2026-07-22 从 Windows 用户级环境变量读
+# mavis/scheduled task 启动的进程不会自动读 HKCU\Environment,
+# 所以 user-scope env var 不会自动注入 process env,这里兜底
+if not TOKEN and os.name == 'nt':
+    try:
+        import winreg
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, r'Environment') as _k:
+            TOKEN = winreg.QueryValueEx(_k, 'GH_TOKEN')[0]
+    except (OSError, FileNotFoundError):
+        pass
 BRANCH = 'main'
 
 
