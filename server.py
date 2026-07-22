@@ -403,7 +403,9 @@ class LimitedServer(ThreadingHTTPServer):
 
 
 if __name__ == '__main__':
-    port = 9001
+    # 2026-07-22 v2.0.3:默认端口回归 8081(README 声明值)
+    # dev/测试用 9001 时设环境变量:set PICTUREWEB_TEST_PORT=9001
+    port = int(os.environ.get('PICTUREWEB_TEST_PORT', '8081'))
     host = '0.0.0.0'  # 监听所有接口(2026-06-27 改为 0.0.0.0 允许局域网访问)
     os.chdir(os.path.dirname(__file__))
     print(f'Library 启动: http://127.0.0.1:{port}/', flush=True)

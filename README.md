@@ -49,11 +49,11 @@ python -X utf8 server.py
 
 ```
 PictureWeb/
-├── server.py            # 后端(383 行 · 单文件)
+├── server.py            # 后端(约 420 行 · 单文件)
 ├── index.html           # 搜索主页(CSS+JS 内嵌)
 ├── start.bat            # Windows 启动
 ├── start.sh             # macOS/Linux 启动
-├── start_hidden.vbs     # 无窗口启动(路径待修,见 Issue #1)
+├── start_hidden.vbs     # 无窗口启动(2026-07-22 v2.0.3:加错误处理+日志)
 ├── libraryControl.md    # 旧 control 文件
 ├── LICENSE              # 许可证
 ├── favorites.json       # 收藏(运行时,gitignore)
@@ -65,6 +65,7 @@ PictureWeb/
 
 | 日期 | 变更 | 触发 |
 |------|------|------|
+| 2026-07-22 | patch → v2.0.3 + server.py 端口回归 8081(PICTUREWEB_TEST_PORT env 覆盖)+ start_hidden.vbs 加错误处理+日志 | 修端口 regression + Issue #1 收尾 |
 | 2026-07-22 | patch → v2.0.2 + server.py load_favs/save_favs 用 with 块 + 改 except 类型 | 修小问题 |
 | 2026-07-22 | 重大升级 → v2.0.0 + daily_pipeline 端口/日志/环境变量重构 | 用户手动指定 |
 | 2026-07-21 | git init + .gitignore + README(本文件) | 接入 3-agent 流水线试点 |
@@ -73,6 +74,7 @@ PictureWeb/
 
 ## 验收日志
 
+- 2026-07-22 · v2.0.3 · patch: server.py 端口 9001→8081(PICTUREWEB_TEST_PORT env 覆盖), start_hidden.vbs 加 On Error + 写日志, README 修"路径待修"过时描述
 - 2026-07-22 · v2.0.2 · patch: server.py load_favs/save_favs 用 with 块, 修 bare except 吞所有异常
 - 2026-07-22 · v2.0.0 · 跨 major 升级 + daily_pipeline 端口自适应(8081/9001)+ PICTUREWEB_TEST_PORT 环境变量 + server 启停改用日志文件
 - 2026-07-21 · v0.1.0 · 3-Agent 流水线首次跑通(PR #9 + #10)

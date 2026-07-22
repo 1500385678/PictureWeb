@@ -48,6 +48,9 @@ desktop.ini
 ehthumbs.db
 $RECYCLE.BIN/
 
-# ===== 项目特定:被替换的启动器(start_hidden.vbs 路径写错)=====
-# Issue #1 修完之后取消注释
-# start_hidden.vbs
+# ===== 项目特定(2026-07-22 v2.0.3 收尾):被替换的临时调试脚本(已删)=====
+# monitor_server.py
+# scripts/pw_initial_push.ps1
+# scripts/pw_list_tree.ps1
+# scripts/pw_push_v202.py
+# scripts/pw_release_v202.py
