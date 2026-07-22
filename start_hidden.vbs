@@ -1,5 +1,6 @@
 ' PictureWeb 自动启动(用相对路径,跟 vbs 所在目录)
 ' 2026-07-22 v2.0.3:加错误处理 + 写日志(双击没反应时能看到原因)
+' 2026-07-22 v2.0.5:加 PICTUREWEB_TEST_PORT=9001 env set,Task Scheduler 自动启动时切 dev 端口
 Option Explicit
 
 Sub LaunchServer()
@@ -13,6 +14,9 @@ Sub LaunchServer()
 
     ' 确保 logs 目录存在
     fso.CreateFolder(scriptDir & "\logs")
+
+    ' 2026-07-22 v2.0.5:设置 dev 端口 env(2026-07-22 开机启动约定走 9001)
+    WshShell.Environment("Process")("PICTUREWEB_TEST_PORT") = "9001"
 
     WshShell.CurrentDirectory = scriptDir
     WshShell.Run "python.exe -X utf8 """ & scriptDir & "\server.py""", 0, False
@@ -30,3 +34,4 @@ Sub LaunchServer()
 End Sub
 
 LaunchServer
+

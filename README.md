@@ -65,6 +65,7 @@ PictureWeb/
 
 | 日期 | 变更 | 触发 |
 |------|------|------|
+| 2026-07-22 | patch → v2.0.5 + 仓库改 private + start_hidden.vbs 加 PICTUREWEB_TEST_PORT=9001 dev 模式 + git_data_push.py/auto_release.py 默认 REPO 改新仓库 + AGENTS.md §1 改 private | 收尾 v2.0.4 残留 + 修老仓库误推风险 + 开机自启(Startup 快捷方式)|
 | 2026-07-22 | patch → v2.0.4 + git_data_push.py / auto_release.py 加 Windows 用户级环境变量 fallback + 修 origin/local sha 错位 + README 改 port 说明 | mavis bash tool 不读 HKCU\Environment,token 持久化补丁 |
 | 2026-07-22 | patch → v2.0.3 + server.py 端口回归 8081(PICTUREWEB_TEST_PORT env 覆盖)+ start_hidden.vbs 加错误处理+日志 | 修端口 regression + Issue #1 收尾 |
 | 2026-07-22 | patch → v2.0.2 + server.py load_favs/save_favs 用 with 块 + 改 except 类型 | 修小问题 |
@@ -75,6 +76,7 @@ PictureWeb/
 
 ## 验收日志
 
+- 2026-07-22 · v2.0.5 · patch: 仓库 visibility public→private, start_hidden.vbs 加 PICTUREWEB_TEST_PORT=9001 env set, git_data_push.py/auto_release.py 默认 REPO 改新仓库(避免老仓库误推), AGENTS.md §1 同步
 - 2026-07-22 · v2.0.4 · patch: git_data_push.py / auto_release.py 加 HKCU\Environment fallback(mavis bash tool 自动读 user-scope token)+ origin/local sha 错位修复(force update + squash)
 - 2026-07-22 · v2.0.3 · patch: server.py 端口 9001→8081(PICTUREWEB_TEST_PORT env 覆盖), start_hidden.vbs 加 On Error + 写日志, README 修"路径待修"过时描述
 - 2026-07-22 · v2.0.2 · patch: server.py load_favs/save_favs 用 with 块, 修 bare except 吞所有异常

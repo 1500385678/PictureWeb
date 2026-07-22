@@ -14,7 +14,7 @@
 | 项 | 值 |
 |---|---|
 | 工作目录 | `D:\Mac\Mac\Mac\workteam\05_space\03_architect\Mobile\_ArchitectMobileLib\PictureWeb\` |
-| 远端仓库 | `https://github.com/1500385678/PictureWeb` (public) |
+| 远端仓库 | `https://github.com/1500385678/PictureWeb` (private, 2026-07-22 v2.0.5 起) |
 | 远端主分支 | `main` |
 | 当前版本 | `v2.0.2` (`__version__.py`) |
 | 启动命令 | `python -X utf8 server.py` (Windows) 或双击 `start.bat` |

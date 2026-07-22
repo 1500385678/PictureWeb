@@ -12,7 +12,7 @@ import urllib.parse
 import urllib.request
 
 API_BASE = 'https://api.github.com'
-REPO = os.environ.get('PICTUREWEB_REPO', '1500385678/PictureWebWorkflowtest')
+REPO = os.environ.get('PICTUREWEB_REPO', '1500385678/PictureWeb')
 TOKEN = os.environ.get('GH_TOKEN', '')
 # fallback: 2026-07-22 从 Windows 用户级环境变量读
 # mavis/scheduled task 启动的进程不会自动读 HKCU\Environment,
