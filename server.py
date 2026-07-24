@@ -19,7 +19,7 @@ OLD_IMG_ROOT = '/Users/aaron/Mac/WorkTeam/05_Space/03_Architect/Mobile'
 # 读:GET /, GET /img/*, GET /api/search, GET /api/facets, GET /api/favorites
 # 写:POST /api/favorites, POST /api/upload_search, POST /api/ai_image
 ADMIN_IPS = {'127.0.0.1', '192.168.181.136', '::1'}  # 本机 loopback + Windows LAN IP
-WRITE_PATHS = {'/api/favorites', '/api/upload_search', '/api/ai_image', '/api/semantic_search'}
+WRITE_PATHS = {'/api/favorites', '/api/upload_search', '/api/ai_image', '/api/semantic_search', '/api/intent_search'}
 
 # 并发连接数限制(2026-06-28 调整):图片缩略图并发需求高,20 个
 MAX_CONCURRENT = 20
@@ -173,6 +173,8 @@ class Handler(SimpleHTTPRequestHandler):
         elif parsed.path == '/api/semantic_search':
             text = data.get('q', '') or (urllib.parse.parse_qs(parsed.query).get('q', [''])[0] or '')
             self._semantic_search(text)
+        elif parsed.path == '/api/intent_search':
+            self._intent_search(data)
         else:
             self.send_response(404)
             self.end_headers()
@@ -306,6 +308,169 @@ class Handler(SimpleHTTPRequestHandler):
             self._json({'count': len(out), 'items': out, 'query': text})
         except Exception as e:
             self._json({'error': '语义搜索失败: ' + str(e), 'items': []})
+
+    def _intent_search(self, data):
+        """设计意图找参考(2026-07-24 v2.0.6):
+        用户输入自然语言描述(场地/体量/风格/材料...),返回 top 5 匹配案例 +
+        每个案例的"为什么像" reasons(基于 metadata 匹配)
+        不依赖外部 LLM,纯 FTS5 + metadata 模板生成。"""
+        intent = (data.get('intent') or '').strip()
+        if not intent:
+            self._json({'error': 'intent 不能为空', 'items': []})
+            return
+        import re as _re
+        def tokenize(t):
+            t = t.lower()
+            en = _re.findall(r'[a-z0-9]+', t)
+            zh = _re.findall(r'[\u4e00-\u9fff]+', t)
+            tokens = list(en)
+            for w in zh:
+                for i in range(len(w)):
+                    if i+1 < len(w): tokens.append(w[i:i+2])
+                    tokens.append(w[i])
+            return tokens
+
+        intent_tokens = tokenize(intent)
+        if not intent_tokens:
+            self._json({'error': 'intent 拆不出有效关键词', 'items': []})
+            return
+
+        # 中文 → metadata 关键词映射(让用户的口语描述能跟 metadata 对上)
+        KEYWORD_MAP = {
+            '混凝土': ['concrete', '混凝土'],
+            '山地': ['mountain', 'slope', 'hillside', 'mountainous', '山', '坡'],
+            '夜景': ['night', '夜景'],
+            '日落': ['sunset', 'golden-hour', '黄昏', '夕'],
+            '鸟瞰': ['bird-eye', 'bird', '鸟瞰'],
+            '人视': ['eye-level', 'eye', '人视'],
+            '轻盈': ['light', 'airy', 'slim', 'thin', '轻'],
+            '大体量': ['large', 'monumental', 'huge', 'big', '大'],
+            '小尺度': ['small', 'intimate', 'tiny', '小'],
+            '文化': ['cultural', '文化'],
+            '住宅': ['residential', 'residence', 'house', 'housing', '住宅'],
+            '商业': ['commercial', 'commerce', '商业'],
+            '学校': ['school', 'education', '学校', '教育'],
+            '教堂': ['church', 'chapel', 'cathedral', '教堂'],
+            '博物': ['museum', 'gallery', '博物'],
+            '办公': ['office', 'workplace', '办公'],
+            '酒店': ['hotel', 'hospitality', '酒店'],
+            '木质': ['wood', 'timber', '木'],
+            '钢': ['steel', 'metal', '钢'],
+            '玻璃': ['glass', '玻璃'],
+            '砖': ['brick', 'masonry', '砖'],
+            '石': ['stone', 'rock', '石'],
+            '绿色': ['green', 'landscape', '绿'],
+            '水': ['water', 'pool', '水'],
+            '光': ['light', 'daylight', '光'],
+            '禅': ['zen', 'contemplative', 'meditation', '禅'],
+            '神': ['sacred', 'spiritual', 'sacred', '神'],
+        }
+        meta_keywords = set()
+        for k, vlist in KEYWORD_MAP.items():
+            if k in intent:
+                meta_keywords.update(vlist)
+        # 也加 intent 自身 token(让 "教堂" 之类直接命中)
+        for tok in intent_tokens:
+            if len(tok) >= 2:
+                meta_keywords.add(tok)
+
+        # 2026-07-24 v2.0.6:images_fts 用 unicode61 tokenize 不支持中文,改用 LIKE
+        # 取 intent_tokens + meta_keywords 并集,每个都 OR 一个 LIKE
+        all_keywords = list(set(intent_tokens) | meta_keywords)
+        all_keywords = [k for k in all_keywords if len(k) >= 2][:10]  # 限 10 个
+
+        conn = sqlite3.connect(DB)
+        conn.row_factory = sqlite3.Row
+        if all_keywords:
+            conditions = []
+            params = []
+            for kw in all_keywords:
+                conditions.append('(caption LIKE ? OR project LIKE ? OR scene LIKE ? OR material LIKE ? OR mood LIKE ? OR light LIKE ? OR arch_type LIKE ? OR space LIKE ? OR render_company LIKE ? OR filename LIKE ?)')
+                params.extend([f'%{kw}%'] * 10)
+            sql = (
+                "SELECT id, project, filename, abs_path, scene, light, space, material, mood, caption, arch_type, view_type, render_company "
+                "FROM images WHERE " + ' OR '.join(conditions) +
+                " ORDER BY id DESC LIMIT 30"
+            )
+            rows = conn.execute(sql, params).fetchall()
+        else:
+            rows = []
+        conn.close()
+
+        # metadata 字段匹配打分
+        def score(r):
+            s = 0
+            fields = {
+                'project': (r['project'] or '').lower(),
+                'caption': (r['caption'] or '').lower(),
+                'scene': (r['scene'] or '').lower(),
+                'light': (r['light'] or '').lower(),
+                'material': (r['material'] or '').lower(),
+                'space': (r['space'] or '').lower(),
+                'mood': (r['mood'] or '').lower(),
+                'arch_type': (r['arch_type'] or '').lower(),
+            }
+            for mk in meta_keywords:
+                mk_l = mk.lower()
+                for fname, fval in fields.items():
+                    if mk_l in fval:
+                        # material/mood/scene 字段命中权重高
+                        s += 2 if fname in ('material', 'mood', 'arch_type', 'scene') else 1
+            return s
+
+        scored = [(score(r), r) for r in rows]
+        scored.sort(key=lambda x: (-x[0], -x[1]['id']))
+        # 取 score > 0 的前 5,不够则按 rank 补
+        top = [r for s, r in scored if s > 0][:5]
+        if len(top) < 5:
+            for s, r in scored:
+                if r not in top and s >= 0:
+                    top.append(r)
+                    if len(top) >= 5:
+                        break
+
+        # 生成 items + reasons
+        items = []
+        for idx, r in enumerate(top, 1):
+            reasons = []
+            # 头部 reason:项目 + 类型
+            if r['project']: reasons.append(f"项目:{r['project']}")
+            if r['arch_type']: reasons.append(f"类型:{r['arch_type']}")
+            if r['scene']: reasons.append(f"场景:{r['scene']}")
+            if r['view_type']: reasons.append(f"视角:{r['view_type']}")
+            if r['light']: reasons.append(f"光线:{r['light']}")
+            if r['material']: reasons.append(f"材质:{r['material']}")
+            if r['space']: reasons.append(f"空间:{r['space']}")
+            if r['mood']: reasons.append(f"氛围:{r['mood']}")
+            if r['caption']: reasons.append(f"标题:{r['caption']}")
+            if r['render_company']: reasons.append(f"渲染:{r['render_company']}")
+
+            items.append({
+                'id': r['id'],
+                'rank': idx,
+                'project': r['project'] or '',
+                'filename': r['filename'] or '',
+                'url': to_img_url(r['abs_path']),
+                'path': r['abs_path'],
+                'caption': r['caption'] or '',
+                'scene': r['scene'] or '',
+                'light': r['light'] or '',
+                'material': r['material'] or '',
+                'mood': r['mood'] or '',
+                'arch_type': r['arch_type'] or '',
+                'view_type': r['view_type'] or '',
+                'reasons': reasons[:7],
+                # 生图用 prompt 摘要(前端可一键带过去给 MCP)
+                'prompt_hint': ' '.join([
+                    (r['caption'] or ''),
+                    (r['scene'] or ''),
+                    (r['material'] or ''),
+                    (r['light'] or ''),
+                    (r['mood'] or ''),
+                ]).strip(),
+            })
+
+        self._json({'intent': intent, 'count': len(items), 'items': items})
 
     def _upload_search(self, data):
         b64 = data.get('image', '')

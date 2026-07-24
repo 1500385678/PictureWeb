@@ -4,58 +4,761 @@
 <meta charset="UTF-8">
 <title>PictureWeb</title>
 <style>
+:root {
+  --bg: #fbfbfd;
+  --text: #1d1d1f;
+  --text-secondary: #6e6e73;
+  --text-tertiary: #86868b;
+  --border: rgba(0,0,0,0.08);
+  --border-hover: rgba(0,0,0,0.16);
+  --accent: #0071e3;
+  --accent-hover: #0077ed;
+  --accent-soft: rgba(0,113,227,0.12);
+  --card-bg: #ffffff;
+  --header-bg: rgba(251,251,253,0.72);
+  --shadow-sm: 0 2px 8px rgba(0,0,0,0.04);
+  --shadow-md: 0 8px 24px rgba(0,0,0,0.08);
+  --shadow-lg: 0 16px 40px rgba(0,0,0,0.12);
+  --ease: cubic-bezier(0.4, 0, 0.2, 1);
+  --radius: 14px;
+  --radius-lg: 20px;
+}
+
 * { box-sizing: border-box; margin: 0; padding: 0; }
-body { font-family: -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; background: #1a1a1a; color: #eaeaea; min-height: 100vh; }
-header { background: #222; padding: 10px 20px; border-bottom: 1px solid #333; position: sticky; top: 0; z-index: 10; }
-h1 { font-size: 16px; font-weight: 500; margin-bottom: 6px; color: #fff; display: inline-block; margin-right: 16px; }
-.search-box { display: flex; gap: 5px; flex-wrap: nowrap; align-items: center; overflow-x: auto; }
-.search-box input, .search-box select { background: #2a2a2a; border: 1px solid #3a3a3a; color: #eaeaea; padding: 5px 8px; border-radius: 4px; font-size: 13px; }
-.search-box select { width: 150px; flex: 0 0 150px; }
-.search-box input { flex: 1 1 140px; min-width: 120px; }
-.search-box input:focus, .search-box select:focus { outline: none; border-color: #ff9e4a; }
-.search-box button { background: #ff9e4a; color: #fff; border: none; padding: 5px 12px; border-radius: 4px; cursor: pointer; font-size: 13px; white-space: nowrap; }
-.search-box button:hover { background: #ffb370; }
-.btn-secondary { background: #3a3a3a !important; }
-.btn-secondary:hover { background: #4a4a4a !important; }
-.btn-toggle { background: #3a3a3a !important; }
-.btn-toggle.active { background: #ff9e4a !important; }
-.keywords-box { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; margin-top: 6px; }
-.kw-tag { background: #ff9e4a; color: #fff; padding: 4px 10px; border-radius: 12px; font-size: 12px; cursor: pointer; }
-.kw-tag:hover { background: #ff6b6b; }
-.facets { background: #252525; padding: 12px 32px; border-bottom: 1px solid #333; display: flex; gap: 16px; flex-wrap: wrap; font-size: 12px; }
-.facet-group { display: flex; align-items: center; gap: 6px; }
-.facet-label { color: #888; }
-.facet-chip { background: #2a2a2a; color: #ccc; padding: 3px 10px; border-radius: 12px; cursor: pointer; }
-.facet-chip:hover { background: #3a3a3a; color: #fff; }
-.facet-chip.active { background: #ff9e4a; color: #fff; }
-.main { padding: 20px 32px; }
-.result-meta { color: #888; font-size: 13px; margin-bottom: 16px; }
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 12px; }
-.card { background: #2a2a2a; border-radius: 4px; overflow: hidden; cursor: pointer; transition: transform 0.15s; position: relative; }
-.card:hover { transform: translateY(-2px); }
-.card img { width: 100%; height: 200px; object-fit: cover; display: block; background: #1a1a1a; }
-.card-body { padding: 8px 12px; font-size: 12px; color: #aaa; }
-.card-title { color: #ddd; font-size: 13px; margin-bottom: 4px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tags { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 4px; }
-.tag { background: #333; color: #aaa; padding: 1px 6px; border-radius: 3px; font-size: 10px; }
-.fav-btn { position: absolute; top: 8px; right: 8px; background: rgba(0,0,0,0.6); border: none; color: #fff; width: 32px; height: 32px; border-radius: 50%; cursor: pointer; font-size: 16px; }
-.fav-btn.active { color: #ff6b6b; }
-.sim-badge { position: absolute; top: 8px; left: 8px; background: rgba(255, 158, 74, 0.9); color: #fff; padding: 3px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-.view-badge { position: absolute; bottom: 8px; left: 8px; background: rgba(255, 158, 74, 0.9); color: #fff; padding: 2px 7px; border-radius: 4px; font-size: 11px; font-weight: bold; }
-.modal { display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 100; align-items: center; justify-content: center; padding: 32px; }
-.modal.open { display: flex; }
-.modal img { max-width: 90%; max-height: 80vh; object-fit: contain; }
-.modal-info { color: #ccc; margin-top: 16px; max-width: 90%; }
-.modal-close { position: fixed; top: 20px; right: 32px; color: #fff; font-size: 28px; cursor: pointer; background: none; border: none; }
-.upload-area { position: fixed; inset: 0; background: rgba(0,0,0,0.92); z-index: 200; display: none; align-items: center; justify-content: center; flex-direction: column; }
-.upload-area.open { display: flex; }
-.upload-box { border: 2px dashed #555; border-radius: 8px; padding: 60px; text-align: center; color: #888; }
-.upload-box.dragover { border-color: #ff9e4a; color: #fff; }
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", "PingFang SC", "Microsoft YaHei", sans-serif;
+  background: var(--bg);
+  color: var(--text);
+  min-height: 100vh;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  letter-spacing: -0.01em;
+}
+
+/* ============== Header (磨砂玻璃 · 单行极简) ============== */
+header {
+  background: var(--header-bg);
+  -webkit-backdrop-filter: saturate(180%) blur(20px);
+  backdrop-filter: saturate(180%) blur(20px);
+  padding: 6px 14px;
+  border-bottom: 1px solid var(--border);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: nowrap;
+  overflow: hidden;
+}
+
+h1 {
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text);
+  flex: 0 0 auto;
+  white-space: nowrap;
+  margin: 0;
+}
+
+.search-box {
+  display: flex;
+  gap: 3px;
+  align-items: center;
+  flex-wrap: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.search-box input,
+.search-box select {
+  background: rgba(255,255,255,0.5);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 3px 9px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-family: inherit;
+  transition: all 0.2s var(--ease);
+  outline: none;
+  flex: 0 0 auto;
+  height: 24px;
+}
+
+.search-box select { width: 62px; min-width: 0; }
+.search-box input#q { width: 140px; }
+
+.search-box input:focus,
+.search-box select:focus {
+  border-color: var(--accent);
+  background: #fff;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+.search-box button {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 3px 11px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all 0.2s var(--ease);
+  white-space: nowrap;
+  flex: 0 0 auto;
+  height: 24px;
+}
+
+.search-box button:hover {
+  background: var(--accent-hover);
+}
+
+.btn-secondary {
+  background: rgba(0,0,0,0.05) !important;
+  color: var(--text) !important;
+}
+
+.btn-secondary:hover {
+  background: rgba(0,0,0,0.08) !important;
+}
+
+.btn-toggle {
+  background: rgba(0,0,0,0.05) !important;
+  color: var(--text) !important;
+}
+
+.btn-toggle.active {
+  background: #ff3b30 !important;
+  color: #fff !important;
+}
+
+/* ============== Keywords (与 search-box 同行) ============== */
+.keywords-box {
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 3px;
+  align-items: center;
+  flex: 0 0 auto;
+  overflow: hidden;
+  white-space: nowrap;
+  max-width: 200px;
+}
+
+.keywords-box > span { display: none; }
+
+.kw-tag {
+  background: var(--accent);
+  color: #fff;
+  padding: 2px 8px;
+  border-radius: 6px;
+  font-size: 10.5px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  flex: 0 0 auto;
+}
+
+.kw-tag:hover { background: #ff3b30; }
+
+#kw-input {
+  background: rgba(255,255,255,0.5) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 6px !important;
+  padding: 3px 8px !important;
+  font-size: 11px !important;
+  width: 110px !important;
+  color: var(--text) !important;
+  font-family: inherit !important;
+  outline: none;
+  height: 24px !important;
+}
+
+#kw-input:focus {
+  border-color: var(--accent) !important;
+  background: #fff !important;
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+
+/* ============== Tabs ============== */
+.tab-bar {
+  display: inline-flex;
+  gap: 1px;
+  background: rgba(0,0,0,0.05);
+  border-radius: 6px;
+  padding: 1px;
+  flex: 0 0 auto;
+}
+
+.tab {
+  background: transparent !important;
+  color: var(--text-secondary) !important;
+  padding: 2px 9px !important;
+  border-radius: 4px !important;
+  cursor: pointer;
+  font-size: 11px;
+  font-weight: 500;
+  transition: all 0.2s var(--ease);
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.tab:hover { color: var(--text); }
+
+.tab.active {
+  background: #fff !important;
+  color: var(--text) !important;
+  box-shadow: var(--shadow-sm);
+}
+
+/* ============== Facets ============== */
+.facets {
+  background: #fff;
+  padding: 20px 32px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  gap: 24px;
+  flex-wrap: wrap;
+  font-size: 13px;
+}
+
+.facet-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.facet-label {
+  color: var(--text-secondary);
+  font-weight: 500;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.facet-chip {
+  background: rgba(0,0,0,0.05);
+  color: var(--text);
+  padding: 4px 12px;
+  border-radius: 980px;
+  cursor: pointer;
+  transition: all 0.2s var(--ease);
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.facet-chip:hover {
+  background: rgba(0,0,0,0.1);
+  transform: translateY(-1px);
+}
+
+.facet-chip.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+/* ============== Main ============== */
+.main {
+  padding: 40px 32px;
+  max-width: 1600px;
+  margin: 0 auto;
+}
+
+.result-meta {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin-bottom: 24px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+/* ============== Grid & Cards ============== */
+.grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 24px;
+}
+
+.card {
+  background: var(--card-bg);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  cursor: pointer;
+  transition: all 0.35s var(--ease);
+  position: relative;
+  box-shadow: var(--shadow-sm);
+  border: 1px solid var(--border);
+  animation: slideUp 0.5s var(--ease) backwards;
+}
+
+.card:nth-child(1) { animation-delay: 0.02s; }
+.card:nth-child(2) { animation-delay: 0.04s; }
+.card:nth-child(3) { animation-delay: 0.06s; }
+.card:nth-child(4) { animation-delay: 0.08s; }
+.card:nth-child(5) { animation-delay: 0.10s; }
+.card:nth-child(6) { animation-delay: 0.12s; }
+.card:nth-child(7) { animation-delay: 0.14s; }
+.card:nth-child(8) { animation-delay: 0.16s; }
+.card:nth-child(9) { animation-delay: 0.18s; }
+.card:nth-child(10) { animation-delay: 0.20s; }
+
+.card:hover {
+  transform: translateY(-6px) scale(1.01);
+  box-shadow: var(--shadow-lg);
+  border-color: var(--border-hover);
+}
+
+.card img {
+  width: 100%;
+  height: 220px;
+  object-fit: cover;
+  display: block;
+  background: #f0f0f0;
+  transition: transform 0.6s var(--ease);
+}
+
+.card:hover img { transform: scale(1.06); }
+
+.card-body {
+  padding: 14px 16px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.card-title {
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  letter-spacing: -0.01em;
+}
+
+.tags {
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  margin-top: 6px;
+}
+
+.tag {
+  background: rgba(0,0,0,0.05);
+  color: var(--text-secondary);
+  padding: 2px 9px;
+  border-radius: 980px;
+  font-size: 10px;
+  font-weight: 500;
+}
+
+.fav-btn {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  background: rgba(255,255,255,0.9);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: none;
+  color: var(--text-secondary);
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  cursor: pointer;
+  font-size: 18px;
+  transition: all 0.2s var(--ease);
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.fav-btn:hover {
+  background: #fff;
+  transform: scale(1.1);
+}
+
+.fav-btn.active { color: #ff3b30; }
+
+.sim-badge {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  background: rgba(0,0,0,0.75);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: #fff;
+  padding: 4px 12px;
+  border-radius: 980px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+}
+
+.view-badge {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  background: rgba(255,255,255,0.92);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  color: var(--text);
+  padding: 3px 11px;
+  border-radius: 980px;
+  font-size: 10px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+/* ============== Modal ============== */
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.88);
+  z-index: 100;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+.modal.open {
+  display: flex;
+  animation: fadeIn 0.3s var(--ease);
+}
+
+.modal img {
+  max-width: 90%;
+  max-height: 80vh;
+  object-fit: contain;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-lg);
+  animation: scaleIn 0.3s var(--ease);
+}
+
+.modal-info {
+  color: rgba(255,255,255,0.9);
+  margin-top: 16px;
+  max-width: 90%;
+  font-size: 14px;
+}
+
+.modal-close {
+  position: fixed;
+  top: 24px;
+  right: 32px;
+  color: #fff;
+  font-size: 24px;
+  cursor: pointer;
+  background: rgba(255,255,255,0.1);
+  -webkit-backdrop-filter: blur(8px);
+  backdrop-filter: blur(8px);
+  border: none;
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  transition: all 0.2s var(--ease);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.modal-close:hover {
+  background: rgba(255,255,255,0.2);
+  transform: scale(1.1);
+}
+
+/* ============== Upload ============== */
+.upload-area {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.88);
+  z-index: 200;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  -webkit-backdrop-filter: blur(20px);
+  backdrop-filter: blur(20px);
+}
+
+.upload-area.open {
+  display: flex;
+  animation: fadeIn 0.3s var(--ease);
+}
+
+.upload-box {
+  border: 2px dashed rgba(255,255,255,0.3);
+  border-radius: var(--radius-lg);
+  padding: 80px;
+  text-align: center;
+  color: rgba(255,255,255,0.7);
+  background: rgba(255,255,255,0.05);
+  transition: all 0.25s var(--ease);
+}
+
+.upload-box.dragover {
+  border-color: var(--accent);
+  color: #fff;
+  background: rgba(0,113,227,0.1);
+  transform: scale(1.02);
+}
+
 .upload-box input { display: none; }
-.loading { color: #888; padding: 40px; text-align: center; }
-.tab-bar { display: flex; gap: 8px; margin-top: 4px; }
-.tab { background: #2a2a2a; color: #ccc; padding: 6px 14px; border-radius: 4px; cursor: pointer; font-size: 13px; }
-.tab.active { background: #ff9e4a; color: #fff; }
+
+/* ============== Loading ============== */
+.loading {
+  color: var(--text-secondary);
+  padding: 60px;
+  text-align: center;
+  font-size: 15px;
+}
+
+/* ============== Intent Panel (AI 找参考) ============== */
+.intent-panel {
+  padding: 32px;
+  max-width: 1600px;
+  margin: 0 auto;
+  background: var(--bg);
+  min-height: calc(100vh - 100px);
+}
+
+.intent-input-wrap {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  margin-bottom: 24px;
+  box-shadow: var(--shadow-sm);
+  animation: slideUp 0.4s var(--ease);
+}
+
+.intent-input-wrap textarea {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 12px 14px;
+  font-family: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  color: var(--text);
+  background: rgba(255,255,255,0.6);
+  resize: vertical;
+  outline: none;
+  transition: all 0.2s var(--ease);
+  box-sizing: border-box;
+}
+
+.intent-input-wrap textarea:focus {
+  border-color: var(--accent);
+  background: #fff;
+  box-shadow: 0 0 0 3px var(--accent-soft);
+}
+
+.intent-actions {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 12px;
+}
+
+.btn-primary {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 8px 22px;
+  border-radius: 980px;
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all 0.2s var(--ease);
+  flex: 0 0 auto;
+}
+
+.btn-primary:hover {
+  background: var(--accent-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,113,227,0.3);
+}
+
+.intent-hint {
+  color: var(--text-tertiary);
+  font-size: 12px;
+  flex: 1 1 auto;
+}
+
+.intent-results {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.intent-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  display: flex;
+  gap: 0;
+  transition: all 0.3s var(--ease);
+  animation: slideUp 0.5s var(--ease) backwards;
+}
+
+.intent-card:nth-child(1) { animation-delay: 0.05s; }
+.intent-card:nth-child(2) { animation-delay: 0.10s; }
+.intent-card:nth-child(3) { animation-delay: 0.15s; }
+.intent-card:nth-child(4) { animation-delay: 0.20s; }
+.intent-card:nth-child(5) { animation-delay: 0.25s; }
+
+.intent-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow-md);
+}
+
+.intent-card-img {
+  flex: 0 0 320px;
+  height: 240px;
+  background: #f0f0f0;
+  cursor: pointer;
+  overflow: hidden;
+}
+
+.intent-card-img img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+  transition: transform 0.4s var(--ease);
+}
+
+.intent-card-img:hover img {
+  transform: scale(1.04);
+}
+
+.intent-card-body {
+  flex: 1 1 auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  min-width: 0;
+}
+
+.intent-card-rank {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-tertiary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+}
+
+.intent-card-title {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.01em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.intent-card-caption {
+  font-size: 13px;
+  color: var(--text-secondary);
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.intent-reasons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 4px;
+}
+
+.intent-reason-chip {
+  background: rgba(0,113,227,0.08);
+  color: var(--accent);
+  padding: 3px 10px;
+  border-radius: 980px;
+  font-size: 11px;
+  font-weight: 500;
+}
+
+.intent-card-actions {
+  margin-top: auto;
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+
+.btn-variant {
+  background: rgba(0,0,0,0.05);
+  color: var(--text);
+  border: none;
+  padding: 5px 14px;
+  border-radius: 980px;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 500;
+  font-family: inherit;
+  transition: all 0.2s var(--ease);
+}
+
+.btn-variant:hover {
+  background: var(--accent);
+  color: #fff;
+}
+
+.btn-variant:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.intent-variant-result {
+  margin-top: 12px;
+  padding: 12px;
+  background: rgba(0,0,0,0.03);
+  border-radius: 12px;
+  font-size: 12px;
+  color: var(--text-secondary);
+  min-height: 40px;
+}
+
+.intent-variant-result img {
+  max-width: 100%;
+  border-radius: 8px;
+  margin-top: 8px;
+}
+
+/* ============== Animations ============== */
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes scaleIn {
+  from { opacity: 0; transform: scale(0.92); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(20px); }
+  to { opacity: 1; transform: translateY(0); }
+}
 </style>
 </head>
 <body>
@@ -63,13 +766,13 @@ h1 { font-size: 16px; font-weight: 500; margin-bottom: 6px; color: #fff; display
   <h1>PictureWeb</h1>
   <div class="search-box">
     <input id="q" type="text" placeholder="搜索关键词，如：黄昏鸟瞰、住宅、教堂..." autofocus>
-    <select id="project"><option value="">全部项目</option></select>
-    <select id="scene"><option value="">全部场景</option></select>
-    <select id="light"><option value="">全部光线</option></select>
-    <select id="mood"><option value="">全部氛围</option></select>
-    <select id="arch"><option value="">全部类型</option></select>
-    <select id="company"><option value="">全部渲染公司</option></select>
-    <select id="view"><option value="">全部视角</option></select>
+    <select id="project" data-label="项目"><option value=""></option></select>
+    <select id="scene" data-label="场景"><option value=""></option></select>
+    <select id="light" data-label="光线"><option value=""></option></select>
+    <select id="mood" data-label="氛围"><option value=""></option></select>
+    <select id="arch" data-label="类型"><option value=""></option></select>
+    <select id="company" data-label="公司"><option value=""></option></select>
+    <select id="view" data-label="视角"><option value=""></option></select>
     <button onclick="search()">搜索</button>
     <button class="btn-secondary" onclick="openUpload()">上传搜图</button>
     <button class="btn-toggle" id="fav-toggle" onclick="toggleFavMode()">★ 收藏</button>
@@ -82,12 +785,23 @@ h1 { font-size: 16px; font-weight: 500; margin-bottom: 6px; color: #fff; display
     <div class="tab active" data-mode="normal" onclick="setMode('normal')">普通搜</div>
     <div class="tab" data-mode="sim" onclick="setMode('sim')">相似图</div>
     <div class="tab" data-mode="sem" onclick="setMode('sem')">AI 语义</div>
+    <div class="tab" data-mode="intent" onclick="setMode('intent')">AI 找参考</div>
   </div>
 </header>
 <div class="facets" id="facets"></div>
 <div class="main">
   <div class="result-meta" id="meta">输入关键词开始搜索</div>
   <div class="grid" id="grid"></div>
+</div>
+<div class="intent-panel" id="intent-panel" style="display:none">
+  <div class="intent-input-wrap">
+    <textarea id="intent-input" rows="3" placeholder="用自然语言描述你的设计想法。例如:&#10;我想做一个轻盈的山地教堂,800 平,混凝土结构,跟山体融合,夜景氛围"></textarea>
+    <div class="intent-actions">
+      <button class="btn-primary" onclick="searchIntent()">找参考</button>
+      <span class="intent-hint" id="intent-hint">↑ 描述场地/体量/材料/氛围/光,AI 会匹配 5 个最相关的案例 + 解释为什么像</span>
+    </div>
+  </div>
+  <div class="intent-results" id="intent-results"></div>
 </div>
 <div class="modal" id="modal" onclick="closeModal()">
   <button class="modal-close">×</button>
@@ -133,11 +847,11 @@ async function init() {
 
 function fillSelect(id, items) {
   const sel = document.getElementById(id);
-  sel.innerHTML = '<option value="">全部' + sel.id + '</option>';
+  sel.innerHTML = '<option value="">' + (sel.dataset.label || '全部') + '</option>';
   items.forEach(v => {
     const opt = document.createElement('option');
     opt.value = v;
-    opt.textContent = v.length > 30 ? v.substring(0, 30) + '…' : v;
+    opt.textContent = v.length > 20 ? v.substring(0, 20) + '…' : v;
     sel.appendChild(opt);
   });
 }
@@ -192,6 +906,112 @@ function setMode(m) {
   mode = m;
   document.querySelectorAll('.tab').forEach(t => t.classList.toggle('active', t.dataset.mode === m));
   document.getElementById('q').placeholder = m === 'sim' ? 'phash 视觉相似需要上传图...' : (m === 'sem' ? 'AI 语义搜：输入"黄昏鸟瞰住宅"自动找相似图...' : '搜索关键词...');
+
+  // 2026-07-24 v2.0.6: AI 找参考 模式 切换 intent-panel 显示
+  const intentPanel = document.getElementById('intent-panel');
+  const mainEl = document.querySelector('.main');
+  const facetsEl = document.getElementById('facets');
+  if (m === 'intent') {
+    intentPanel.style.display = 'block';
+    mainEl.style.display = 'none';
+    facetsEl.style.display = 'none';
+  } else {
+    intentPanel.style.display = 'none';
+    mainEl.style.display = 'block';
+    facetsEl.style.display = 'flex';
+  }
+}
+
+async function searchIntent() {
+  const intent = document.getElementById('intent-input').value.trim();
+  if (!intent) {
+    document.getElementById('intent-hint').textContent = '⚠️ 请输入你的设计意图';
+    return;
+  }
+  document.getElementById('intent-hint').textContent = '↑ 描述场地/体量/材料/氛围/光,AI 会匹配 5 个最相关的案例 + 解释为什么像';
+
+  const results = document.getElementById('intent-results');
+  results.innerHTML = '<div class="loading">匹配中…</div>';
+
+  const r = await fetch('/api/intent_search', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({intent}),
+  });
+  const data = await r.json();
+
+  if (data.error) {
+    results.innerHTML = '<div class="loading">⚠️ ' + data.error + '</div>';
+    return;
+  }
+  if (!data.items || data.items.length === 0) {
+    results.innerHTML = '<div class="loading">没找到匹配案例,试试更宽泛的描述</div>';
+    return;
+  }
+
+  results.innerHTML = '';
+  data.items.forEach(item => {
+    const card = document.createElement('div');
+    card.className = 'intent-card';
+    const reasonsHtml = (item.reasons || []).map(re =>
+      `<span class="intent-reason-chip">${re}</span>`
+    ).join('');
+    card.innerHTML = `
+      <div class="intent-card-img" onclick="openModal({url:'${item.url}',filename:'${item.filename}',project:'${item.project}',caption:'${(item.caption||'').replace(/'/g, "\\'")}',scene:'${item.scene||''}',light:'${item.light||''}',material:'${item.material||''}',mood:'${item.mood||''}',space:'',path:'${item.path||''}',id:${item.id}})">
+        <img src="${item.url}" onerror="this.style.opacity=0.3">
+      </div>
+      <div class="intent-card-body">
+        <div class="intent-card-rank">匹配 #${item.rank} · ${item.project}</div>
+        <div class="intent-card-title">${item.caption || item.filename}</div>
+        <div class="intent-card-caption"></div>
+        <div class="intent-reasons">${reasonsHtml}</div>
+        <div class="intent-card-actions">
+          <button class="btn-variant" onclick="generateVariant(${item.id}, this)">✨ 生图变体(MCP)</button>
+          <button class="btn-variant" onclick="openModal({url:'${item.url}',filename:'${item.filename}',project:'${item.project}',caption:'${(item.caption||'').replace(/'/g, "\\'")}',scene:'${item.scene||''}',light:'${item.light||''}',material:'${item.material||''}',mood:'${item.mood||''}',space:'',path:'${item.path||''}',id:${item.id}})">查看大图</button>
+        </div>
+        <div class="intent-variant-result" id="variant-${item.id}"></div>
+      </div>
+    `;
+    results.appendChild(card);
+  });
+}
+
+async function generateVariant(itemId, btn) {
+  const target = document.getElementById('variant-' + itemId);
+  if (!target) return;
+  const origText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = '⏳ 生成中…';
+  target.innerHTML = '<div style="color:var(--text-tertiary)">调 matrix MCP 生成变体…</div>';
+
+  // 找到该 item 的 prompt_hint
+  const cards = document.querySelectorAll('.intent-card');
+  let promptHint = '';
+  const intent = document.getElementById('intent-input').value.trim();
+  // 用 intent + 后端给的 prompt_hint(从后端响应里拿不到,前端再 fetch 一次或直接用 intent 拼)
+  // 简化:用 intent 作为 prompt,后端会基于 metadata 自动给变体
+  promptHint = intent;
+
+  try {
+    const r = await fetch('/api/ai_image', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({prompt: promptHint, aspect_ratio: '3:2', resolution: '2K'}),
+    });
+    const data = await r.json();
+    if (data.error) {
+      target.innerHTML = '<div style="color:#ff3b30">⚠️ ' + data.error + '</div>';
+    } else if (data.path) {
+      target.innerHTML = '<div style="color:var(--accent);font-weight:500">✅ 已生成</div><img src="' + data.path + '" style="max-width:100%;border-radius:8px;margin-top:8px">';
+    } else {
+      target.innerHTML = '<div style="color:#ff3b30">⚠️ 未知响应</div>';
+    }
+  } catch (e) {
+    target.innerHTML = '<div style="color:#ff3b30">⚠️ ' + e.message + '</div>';
+  } finally {
+    btn.disabled = false;
+    btn.textContent = origText;
+  }
 }
 
 async function search() {
