@@ -1,56 +1,19 @@
-# ===== 运行时数据(可重建,不进 git)=====
-# 收藏夹(本地缓存,丢了不影响功能)
-favorites.json
-# 调试中间产物
-_ai_req.json
-_ai_video_req.json
-*.tmp
-
-# ===== 日志(daemon/server 输出,本地诊断用)=====
-server.out
-server.err
-daemon.out
-daemon.err
-*.log
-
-# ===== 缩略图缓存(PIL 运行时生成)=====
-thumbs/
-__thumbs__/
-.cache/
-
-# ===== 数据库(SQLite 文件 + 备份)=====
-# PictureDb.db 是兄弟模块共用的,不能进本仓库
-PictureDb.db
-*.db-journal
-*.db-wal
-*.db-shm
-# 备份
-*.bak
+# 数据库备份(迁移脚本自动产生)
+*.db.bak_*
 *.db.bak
 
-# ===== Python 缓存 =====
+# 临时
+.DS_Store
+*.swp
+*.tmp
+
+# Python
 __pycache__/
 *.pyc
-*.pyo
-*.pyd
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
+.venv/
 
-# ===== 编辑器 / 系统垃圾 =====
-.vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-Thumbs.db
-desktop.ini
-ehthumbs.db
-$RECYCLE.BIN/
-
-# ===== 项目特定(2026-07-22 v2.0.3 收尾):被替换的临时调试脚本(已删)=====
-# monitor_server.py
-# scripts/pw_initial_push.ps1
-# scripts/pw_list_tree.ps1
-# scripts/pw_push_v202.py
-# scripts/pw_release_v202.py
+# 缩略图根目录散落的孤儿 PNG(根目录禁散落规则见 thumbs/.gitignore)
+# 子目录的合法缩略图不会被忽略
+thumbs/*.png
+thumbs/*.jpg
+thumbs/*.jpeg
