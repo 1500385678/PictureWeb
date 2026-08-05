@@ -1,0 +1,6 @@
+# thumbs/ 根目录禁止散落文件
+# 缩略图必须放在 thumbs/<project>/<sub>/ 下
+# 根目录出现 .png/.jpg 几乎都是孤儿(2026-08 巡检发现 3 张 matrix-media-*.png)
+*
+!*/
+!.gitignore

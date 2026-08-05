@@ -1,0 +1,19 @@
+# 数据库备份(迁移脚本自动产生)
+*.db.bak_*
+*.db.bak
+
+# 临时
+.DS_Store
+*.swp
+*.tmp
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+
+# 缩略图根目录散落的孤儿 PNG(根目录禁散落规则见 thumbs/.gitignore)
+# 子目录的合法缩略图不会被忽略
+thumbs/*.png
+thumbs/*.jpg
+thumbs/*.jpeg
