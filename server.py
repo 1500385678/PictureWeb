@@ -13,6 +13,7 @@ pictureweb HTTP server · PictureDb 项目的 web 层
 """
 import json
 import os
+import shutil
 import sqlite3
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -62,6 +63,19 @@ class Handler(BaseHTTPRequestHandler):
         self.send_header("Access-Control-Allow-Origin", "*")
         self.end_headers()
         self.wfile.write(body)
+
+    def _stream_file(self, status: int, path_abs: str, ctype: str):
+        """流式发送文件,先发 Content-Length 头,64KB 分块写,避免大文件 OOM。
+        Verifier P0-a 修复: 之前 `f.read()` 一次读全部,DB 错填 1GB 源文件
+        配合 N 并发 = N×1GB OOM,即便 127.0.0.1 也炸。"""
+        size = os.path.getsize(path_abs)
+        self.send_response(status)
+        self.send_header("Content-Type", ctype)
+        self.send_header("Content-Length", str(size))
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.end_headers()
+        with open(path_abs, "rb") as f:
+            shutil.copyfileobj(f, self.wfile, length=64 * 1024)
 
     def _row_to_dict(self, row):
         return {k: row[k] for k in row.keys()}
@@ -145,8 +159,7 @@ class Handler(BaseHTTPRequestHandler):
                 "png": "image/png", "webp": "image/webp",
             }.get(ext, "application/octet-stream")
             try:
-                with open(path_abs, "rb") as f:
-                    return self._binary(200, f.read(), ctype)
+                return self._stream_file(200, path_abs, ctype)
             except OSError as e:
                 return self._json(500, {"error": f"read fail: {e}"})
 
