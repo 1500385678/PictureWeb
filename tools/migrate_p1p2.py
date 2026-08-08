@@ -153,7 +153,7 @@ def main():
         print(f"   ✅ 填充 {desc_ok} 条 description")
 
         # === 5. 重建 images_fts ===
-        print("🔧 重建 images_fts (含 description + 留接口给 arch_type)")
+        print("🔧 重建 images_fts (含 description + arch_type)")
         if not args.dry_run:
             conn.execute("DROP TABLE IF EXISTS images_fts")
             conn.execute("""
@@ -168,17 +168,34 @@ def main():
                     material,
                     mood,
                     light,
+                    arch_type,
                     tokenize = "unicode61 remove_diacritics 2"
                 )
             """)
+            # arch_type 来源: 优先 image_arch_types 多值关联表(空格拼接),
+            # 回退到 images.arch_type 单值(兼容未迁移的旧数据)
             conn.execute("""
-                INSERT INTO images_fts (id, caption, description, filename, project, scene, space, material, mood, light)
-                SELECT id, caption, description, filename, project, scene, space, material, mood, light
-                FROM images
+                INSERT INTO images_fts (id, caption, description, filename, project, scene, space, material, mood, light, arch_type)
+                SELECT
+                    i.id,
+                    i.caption,
+                    i.description,
+                    i.filename,
+                    i.project,
+                    i.scene,
+                    i.space,
+                    i.material,
+                    i.mood,
+                    i.light,
+                    COALESCE(
+                        (SELECT GROUP_CONCAT(value, ' ') FROM image_arch_types WHERE image_id = i.id),
+                        i.arch_type
+                    )
+                FROM images i
             """)
             conn.commit()
             cnt = conn.execute("SELECT COUNT(*) FROM images_fts").fetchone()[0]
-            print(f"   ✅ images_fts 重建,共 {cnt} 条索引")
+            print(f"   ✅ images_fts 重建,共 {cnt} 条索引(已含 arch_type)")
 
         # === 6. 验证 ===
         print("\n📊 验证:")
