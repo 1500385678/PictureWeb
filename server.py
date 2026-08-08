@@ -26,6 +26,15 @@ DB_PATH = os.environ.get(
 )
 PORT = int(os.environ.get("PICTUREDB_PORT", "8081"))
 
+# 路径白名单(P1 防御,Verifier 批 1 行 45):
+# /image 端点 abs_path 是任意绝对路径,虽然 127.0.0.1 风险低,
+# 但哪天绑 0.0.0.0 或外部脚本注入路径(/etc/passwd 等),秒变 path traversal。
+# 只允许发白名单根下的文件,用 realpath 防 symlink 绕过。
+ALLOWED_ROOTS = (
+    os.path.expanduser("~/Mac/WorkTeam/05_Space"),
+    os.path.expanduser("~/Pictures"),
+)
+
 
 def get_conn():
     """每次请求新连接,避免多线程共享问题"""
@@ -41,6 +50,22 @@ def hamming_hex(a: str, b: str) -> int:
     ba = bin(int(a, 16))[2:].zfill(len(a) * 4)
     bb = bin(int(b, 16))[2:].zfill(len(b) * 4)
     return sum(x != y for x, y in zip(ba, bb))
+
+
+def parse_int_param(value: str, default: int, lo: int, hi: int, name: str):
+    """安全解析整型 query 参数。`?limit=` 留空/字母/超长/非数字 → 抛 ValueError。
+
+    Verifier 批 1 行 44 修复: 原 `int(qs.get('limit',['20'])[0])` 对
+    `?limit=abc` 或 `?id=99999999999999999` 抛 ValueError 变 500,
+    且不带 JSON 错误体,前端拿不到 reason。统一 try/except 转 400。
+    """
+    if not value:  # 留空 → 兜底默认值
+        return default
+    try:
+        n = int(value)
+    except (ValueError, TypeError):
+        raise ValueError(f"invalid {name}: {value!r}")
+    return max(lo, min(n, hi))
 
 
 class Handler(BaseHTTPRequestHandler):
@@ -102,8 +127,12 @@ class Handler(BaseHTTPRequestHandler):
         # /search?q=<query>
         if path == "/search":
             q = (qs.get("q", [""])[0] or "").strip()
-            limit = int(qs.get("limit", ["20"])[0])
-            limit = max(1, min(limit, 100))
+            try:
+                limit = parse_int_param(
+                    qs.get("limit", [""])[0], default=20, lo=1, hi=100, name="limit"
+                )
+            except ValueError as e:
+                return self._json(400, {"error": "invalid param", "param": str(e)})
             if not q:
                 return self._json(400, {"error": "missing q"})
 
@@ -139,8 +168,9 @@ class Handler(BaseHTTPRequestHandler):
         # /image?id=<id>
         if path == "/image":
             id_s = qs.get("id", [""])[0]
-            if not id_s.isdigit():
-                return self._json(400, {"error": "id must be integer"})
+            if not id_s or not id_s.isdigit() or len(id_s) > 9:
+                # id 留空 / 含字母 / 超长(>9 位) 一律 400
+                return self._json(400, {"error": "invalid param", "param": "id must be 1-9 digit integer"})
             conn = get_conn()
             try:
                 row = conn.execute(
@@ -158,6 +188,10 @@ class Handler(BaseHTTPRequestHandler):
                 "jpg": "image/jpeg", "jpeg": "image/jpeg",
                 "png": "image/png", "webp": "image/webp",
             }.get(ext, "application/octet-stream")
+            # 路径白名单(P1 防御 — 行 45),realpath 防 symlink 绕过
+            real = os.path.realpath(path_abs)
+            if not any(real.startswith(r) for r in ALLOWED_ROOTS):
+                return self._json(403, {"error": "path not allowed", "path": real})
             try:
                 return self._stream_file(200, path_abs, ctype)
             except OSError as e:
@@ -167,8 +201,8 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/phash":
             id_s = qs.get("id", [""])[0]
             other = qs.get("other", [""])[0]
-            if not id_s.isdigit():
-                return self._json(400, {"error": "id must be integer"})
+            if not id_s or not id_s.isdigit() or len(id_s) > 9:
+                return self._json(400, {"error": "invalid param", "param": "id must be 1-9 digit integer"})
             conn = get_conn()
             try:
                 row = conn.execute(

@@ -1,16 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-fill_light_gpt4v.py · PictureWeb 光线字段 GPT-4V 补全脚本
+fill_light_gpt4v.py · PictureWeb 光线字段 LLM 补全脚本
 
 背景:P1 数据质量修复。images.light 89/390 空(22.8%),集中在 中建·玖上琅宸 / 好莱坞山豪宅。
-策略:用 GPT-4V(支持图片理解)反推光线标签,优先填 daylight / night / dusk / dawn / overcast。
+策略:用视觉 LLM 反推光线标签,优先填 daylight / night / dusk / dawn / overcast。
+模型优先级:OpenAI gpt-4o → Anthropic Claude 3.5 Sonnet(回退)。
 
 用法:
     # 1. 试运行(只统计,不发请求,标 ⚠️ 表示无 key)
     python3 tools/fill_light_gpt4v.py --dry-run
 
-    # 2. 真跑(需要 OPENAI_API_KEY 环境变量)
+    # 2. 真跑(需要 OPENAI_API_KEY 或 ANTHROPIC_API_KEY)
     export OPENAI_API_KEY=sk-xxxxx
     python3 tools/fill_light_gpt4v.py --limit 20
 
@@ -64,49 +65,105 @@ def get_pending_light_ids(conn, project=None, limit=None):
 
 
 def call_gpt4v(image_path: str, caption: str) -> str:
-    """调用 GPT-4V 反推光线标签。返回小写白名单中的值。"""
+    """调用 GPT-4V 反推光线标签。返回小写白名单中的值。
+
+    Verifier 批 1 行 43 修复:
+    - 删 b64[:100] 切片(原写法把 base64 截前 100 字符再拼 '...',不是合法 base64,
+      GPT-4V 收损坏图全军覆没)
+    - 模型 gpt-4-vision-preview 已退役(2024-12 起 404),改 gpt-4o
+    - 增加 OpenAI 失败时回退到 Anthropic Claude 3.5 Sonnet 的路径
+    """
     import base64
     import urllib.request
     import json as jsonlib
 
-    api_key = os.environ["OPENAI_API_KEY"]
+    # 完整 base64,不切片
     with open(image_path, "rb") as f:
         b64 = base64.b64encode(f.read()).decode()
 
-    body = {
-        "model": "gpt-4-vision-preview",
-        "messages": [{
-            "role": "user",
-            "content": [
-                {"type": "text", "text": (
-                    f"这张建筑效果图的光线属于下列哪种?只回一个词,小写英文,从白名单里选。\n"
-                    f"白名单:{','.join(sorted(LIGHT_WHITELIST))}\n"
-                    f"caption 辅助:{caption or '(无)'}\n"
-                    f"你的回答:"
-                )},
-                {"type": "image_url", "image_url": {
-                    "url": f"data:image/jpeg;base64,{b64[:100]}..."
-                }},
-            ],
-        }],
-        "max_tokens": 10,
-    }
-    req = urllib.request.Request(
-        "https://api.openai.com/v1/chat/completions",
-        data=jsonlib.dumps(body).encode(),
-        headers={
-            "Authorization": f"Bearer {api_key}",
-            "Content-Type": "application/json",
-        },
+    ext = (os.path.splitext(image_path)[1] or ".jpg").lstrip(".").lower()
+    mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+            "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
+    data_url = f"data:{mime};base64,{b64}"  # 完整 base64,不切片
+
+    prompt = (
+        f"这张建筑效果图的光线属于下列哪种?只回一个词,小写英文,从白名单里选。\n"
+        f"白名单:{','.join(sorted(LIGHT_WHITELIST))}\n"
+        f"caption 辅助:{caption or '(无)'}\n"
+        f"你的回答:"
     )
-    with urllib.request.urlopen(req, timeout=30) as resp:
-        data = jsonlib.loads(resp.read())
-    answer = (data["choices"][0]["message"]["content"] or "").strip().lower()
-    # 白名单校验
-    for w in LIGHT_WHITELIST:
-        if w in answer:
-            return w
-    return ""
+
+    # 1) 优先 OpenAI gpt-4o
+    openai_key = os.environ.get("OPENAI_API_KEY")
+    if openai_key:
+        body = {
+            "model": "gpt-4o",  # vision-preview 已退役 → 改 gpt-4o
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image_url", "image_url": {"url": data_url}},
+                ],
+            }],
+            "max_tokens": 10,
+        }
+        req = urllib.request.Request(
+            "https://api.openai.com/v1/chat/completions",
+            data=jsonlib.dumps(body).encode(),
+            headers={
+                "Authorization": f"Bearer {openai_key}",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = jsonlib.loads(resp.read())
+            answer = (data["choices"][0]["message"]["content"] or "").strip().lower()
+            for w in LIGHT_WHITELIST:
+                if w in answer:
+                    return w
+            return ""
+        except Exception as e:
+            sys.stderr.write(f"[openai fail] {e}; 回退 Anthropic\n")
+
+    # 2) 回退 Anthropic Claude 3.5 Sonnet
+    anth_key = os.environ.get("ANTHROPIC_API_KEY")
+    if anth_key:
+        body = {
+            "model": "claude-3-5-sonnet-20241022",
+            "max_tokens": 10,
+            "messages": [{
+                "role": "user",
+                "content": [
+                    {"type": "text", "text": prompt},
+                    {"type": "image",
+                     "source": {"type": "base64", "media_type": mime, "data": b64}},
+                ],
+            }],
+        }
+        req = urllib.request.Request(
+            "https://api.anthropic.com/v1/messages",
+            data=jsonlib.dumps(body).encode(),
+            headers={
+                "x-api-key": anth_key,
+                "anthropic-version": "2023-06-01",
+                "Content-Type": "application/json",
+            },
+        )
+        try:
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                data = jsonlib.loads(resp.read())
+            answer = (data["content"][0]["text"] or "").strip().lower()
+            for w in LIGHT_WHITELIST:
+                if w in answer:
+                    return w
+            return ""
+        except Exception as e:
+            sys.stderr.write(f"[anthropic fail] {e}\n")
+            return ""
+
+    # 3) 两个 key 都没有 — 调用方应已检测到并提示 ⚠️,不该走到这里
+    raise RuntimeError("OPENAI_API_KEY / ANTHROPIC_API_KEY 都没设置")
 
 
 def main():
@@ -142,9 +199,21 @@ def main():
                 print(f"  id={r[0]} project={r[1]} file={r[2]}")
             return
 
-        if "OPENAI_API_KEY" not in os.environ:
-            print("⚠️ 未设置 OPENAI_API_KEY,无法调 GPT-4V")
-            print("   备选:可手动 UPDATE light 字段,或使用 Anthropic Claude 3.5 Sonnet 替代。")
+        if "OPENAI_API_KEY" not in os.environ and "ANTHROPIC_API_KEY" not in os.environ:
+            print("⚠️ 未设置 OPENAI_API_KEY / ANTHROPIC_API_KEY,无法调视觉 LLM")
+            print("   备选方案(curl 模板):")
+            print()
+            print("   # Anthropic Claude 3.5 Sonnet 回退模板")
+            print("   curl -sS https://api.anthropic.com/v1/messages \\")
+            print("     -H \"x-api-key: $ANTHROPIC_API_KEY\" \\")
+            print("     -H \"anthropic-version: 2023-06-01\" \\")
+            print("     -H \"content-type: application/json\" \\")
+            print("     -d '{\"model\":\"claude-3-5-sonnet-20241022\",\"max_tokens\":10,")
+            print("          \"messages\":[{\"role\":\"user\",\"content\":[")
+            print("            {\"type\":\"text\",\"text\":\"<prompt>\"},")
+            print("            {\"type\":\"image\",\"source\":{\"type\":\"base64\",\"media_type\":\"image/jpeg\",\"data\":\"<b64>\"}}")
+            print("          ]}]}'")
+            print()
             print(f"   建议:把这 {len(rows)} 条标记 pending_tag=1,留给前端补录")
             # 不改库,只提示
             print(f"\n   列出 project 分布:")
