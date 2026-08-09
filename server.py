@@ -26,14 +26,45 @@ DB_PATH = os.environ.get(
 )
 PORT = int(os.environ.get("PICTUREDB_PORT", "8081"))
 
-# 路径白名单(P1 防御,Verifier 批 1 行 45):
+# 路径白名单(P1 防御,Verifier 批 1 行 45 + 批 2 行 114):
 # /image 端点 abs_path 是任意绝对路径,虽然 127.0.0.1 风险低,
 # 但哪天绑 0.0.0.0 或外部脚本注入路径(/etc/passwd 等),秒变 path traversal。
-# 只允许发白名单根下的文件,用 realpath 防 symlink 绕过。
-ALLOWED_ROOTS = (
-    os.path.expanduser("~/Mac/WorkTeam/05_Space"),
-    os.path.expanduser("~/Pictures"),
+# 只允许发白名单根下的文件,用 realpath 防 symlink 绕过(P1-c 批 2 行 114:
+# startswith 会被"~/Pictures-evil"前缀撞车绕过,改用 os.path.commonpath)。
+ALLOWED_ROOTS = tuple(
+    os.path.realpath(p)
+    for p in (
+        os.path.expanduser("~/Mac/WorkTeam/05_Space"),
+        os.path.expanduser("~/Pictures"),
+    )
 )
+
+
+def is_under(path: str, roots) -> bool:
+    """判断 path 是否在 roots 任意一根目录下。用 os.path.commonpath 防
+    startswith 前缀撞车(P1-c 批 2 行 114):"~/Pictures-evil/secret.jpg"
+    startswith("~/Pictures") 会放行,但 commonpath 算到 "~/Pictures"
+    和 "~/Pictures-evil" 的最近公共祖先是 "/Users/aaron",不等于任一根,
+    故不放行。realpath 后两侧都消解 symlink,避免软链方向不一致。
+
+    注意:不能用 `os.path.commonpath([path] + list(roots))` 多根 LCA
+    形式 — 多根时它返回所有 path+roots 的最近公共祖先(可能浅到 /),
+    而我们要的是"path 是否是任一根的子目录"。所以逐根比。
+
+    防御:内部对 path 再做一次 realpath,防 commonpath 不解析 `..`
+    留下隐患;空路径直接 False。
+    """
+    if not path:
+        return False
+    real = os.path.realpath(path)
+    for r in roots:
+        try:
+            if os.path.commonpath([real, r]) == r:
+                return True
+        except ValueError:
+            # 不同盘符(Windows)或空路径,commonpath 抛 ValueError → 跳过此根
+            continue
+    return False
 
 
 def get_conn():
@@ -72,6 +103,27 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "PictureWeb/1.0"
 
     # ---------- 工具方法 ----------
+    def _check_fts_health(self) -> tuple[bool, str]:
+        """P1-d (Verifier 批 2 行 115):探测 images_fts 是否存在 + 可用。
+        入口先 SELECT name FROM sqlite_master WHERE name='images_fts' 探测,
+        缺失或不可访问直接返回 (False, detail),由 /search 入口转 503,
+        不进 try/except 静默降级。"""
+        try:
+            conn = get_conn()
+            try:
+                row = conn.execute(
+                    "SELECT name FROM sqlite_master WHERE name = 'images_fts'"
+                ).fetchone()
+            finally:
+                conn.close()
+            if not row:
+                return False, "images_fts table missing"
+            return True, "ok"
+        except sqlite3.OperationalError as e:
+            return False, f"images_fts probe failed: {e}"
+        except sqlite3.DatabaseError as e:
+            return False, f"db error: {e}"
+
     def _json(self, status: int, payload):
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
         self.send_response(status)
@@ -152,6 +204,20 @@ class Handler(BaseHTTPRequestHandler):
             if not q:
                 return self._json(400, {"error": "missing q"})
 
+            # P1-d (Verifier 批 2 行 115):入口先探测 images_fts 健康,
+            # 缺表直接 503,不进 try/except 静默降级(旧版返 200+warning
+            # 让前端以为成功,FTS 真正失败信号被埋)。
+            healthy, detail = self._check_fts_health()
+            if not healthy:
+                sys.stderr.write(f"[FTS-FAIL] {detail}\n")
+                sys.stderr.flush()
+                return self._json(503, {
+                    "error": "service unavailable",
+                    "service": "fts5",
+                    "detail": detail,
+                    "recoverable": True,
+                })
+
             conn = get_conn()
             try:
                 # FTS5:对中文已 tokenize,直接 MATCH
@@ -172,11 +238,15 @@ class Handler(BaseHTTPRequestHandler):
                     "results": [self._row_to_dict(r) for r in rows],
                 })
             except sqlite3.OperationalError as e:
-                return self._json(200, {
-                    "query": q,
-                    "count": 0,
-                    "results": [],
-                    "warning": f"FTS error (回退 LIKE 扫描): {e}",
+                # 真正失败(索引表被外部脚本 DROP、tokenize 参数版本不兼容、
+                # 表锁)时不再伪装 200,改 503 + errors 数组,前端 5xx retry。
+                sys.stderr.write(f"[FTS-FAIL] query OperationalError: {e}\n")
+                sys.stderr.flush()
+                return self._json(503, {
+                    "error": "service unavailable",
+                    "service": "fts5",
+                    "detail": str(e),
+                    "recoverable": True,
                 })
             finally:
                 conn.close()
@@ -197,17 +267,21 @@ class Handler(BaseHTTPRequestHandler):
             if not row:
                 return self._json(404, {"error": "not found"})
             path_abs = row["abs_path"]
-            if not path_abs or not os.path.exists(path_abs):
+            # P0-d (Verifier 批 2 行 113):白名单检查前移到文件存在性之前。
+            # 旧版先 184-185 exists → 404,再 192-194 白名单 → 403,信息熵可还原
+            # DB 内容(404 = 不在 DB 或文件没了,403 = 在 DB 但越界)。现在统一
+            # 403 path not allowed,只有白名单通过的路径才报 404 file missing。
+            real = os.path.realpath(path_abs) if path_abs else ""
+            if not real or not is_under(real, ALLOWED_ROOTS):
+                return self._json(403, {"error": "path not allowed", "path": real})
+            # 白名单通过后才检查文件实际存在性 + 二次 mtime 校验(P0-c 增强)
+            if not os.path.exists(path_abs):
                 return self._json(404, {"error": "file missing on disk"})
             ext = (row["ext"] or "jpg").lower()
             ctype = {
                 "jpg": "image/jpeg", "jpeg": "image/jpeg",
                 "png": "image/png", "webp": "image/webp",
             }.get(ext, "application/octet-stream")
-            # 路径白名单(P1 防御 — 行 45),realpath 防 symlink 绕过
-            real = os.path.realpath(path_abs)
-            if not any(real.startswith(r) for r in ALLOWED_ROOTS):
-                return self._json(403, {"error": "path not allowed", "path": real})
             try:
                 return self._stream_file(200, path_abs, ctype)
             except OSError as e:
@@ -243,19 +317,35 @@ class Handler(BaseHTTPRequestHandler):
         return self._json(404, {"error": "no such endpoint", "path": path})
 
     def log_message(self, fmt, *args):
-        sys.stderr.write("[pictureweb] " + fmt % args + "\n")
+        # P2-c (Verifier 批 2 行 116):显式 flush,避免长跑崩溃时 stderr buffer
+        # 丢尾部(02-巡检 P2.5 提过未修)。
+        msg = "[pictureweb] " + (fmt % args) + "\n"
+        sys.stderr.write(msg)
+        sys.stderr.flush()
+
+
+class _ThreadingServer(ThreadingHTTPServer):
+    """P2-c (Verifier 批 2 行 116):daemon_threads=True 让工作线程随主进程
+    退出,SIGTERM/KeyboardInterrupt 不会被 in-flight 请求拖到 60s+。
+    Python 3.7+ 支持此属性,长史 cron 启停 pictureweb 立即生效。"""
+    daemon_threads = True
 
 
 def main():
     if not os.path.exists(DB_PATH):
         sys.stderr.write(f"[pictureweb] DB not found: {DB_PATH}\n")
+        sys.stderr.flush()
         sys.exit(1)
-    httpd = ThreadingHTTPServer(("127.0.0.1", PORT), Handler)
+    httpd = _ThreadingServer(("127.0.0.1", PORT), Handler)
     sys.stderr.write(f"[pictureweb] listening on http://127.0.0.1:{PORT} (db={DB_PATH})\n")
+    sys.stderr.flush()
     try:
         httpd.serve_forever()
     except KeyboardInterrupt:
         sys.stderr.write("[pictureweb] shutting down\n")
+        sys.stderr.flush()
+        # 显式 shutdown 等 worker 完成,超时 5s 后 server_close
+        httpd.shutdown()
         httpd.server_close()
 
 
