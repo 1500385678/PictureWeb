@@ -91,16 +91,32 @@ class Handler(BaseHTTPRequestHandler):
 
     def _stream_file(self, status: int, path_abs: str, ctype: str):
         """流式发送文件,先发 Content-Length 头,64KB 分块写,避免大文件 OOM。
-        Verifier P0-a 修复: 之前 `f.read()` 一次读全部,DB 错填 1GB 源文件
-        配合 N 并发 = N×1GB OOM,即便 127.0.0.1 也炸。"""
-        size = os.path.getsize(path_abs)
-        self.send_response(status)
-        self.send_header("Content-Type", ctype)
-        self.send_header("Content-Length", str(size))
-        self.send_header("Access-Control-Allow-Origin", "*")
-        self.end_headers()
-        with open(path_abs, "rb") as f:
+        Verifier 修史:
+          · P0-a (批 2 行 42): 之前 `f.read()` 一次读全部,DB 错填 1GB 源文件
+            配合 N 并发 = N×1GB OOM,即便 127.0.0.1 也炸。改 64KB 分块。
+          · P0-c (批 3 行 112): headers 提前发送 — 旧版先 `os.path.getsize` +
+            `send_response` + `send_headers`,再 `open(path_abs, "rb")`。
+            若 `open` 失败(竞态:文件被删 / 权限 / 损坏)headers 已发,客户端
+            看到 0-byte 200 OK + 断流,数据未达 = 半成品下载。改成两阶段:
+              阶段 1: `try: open(path_abs, "rb")` 拿 handle + size(fstat),
+                     失败直接 _json(500) — 此时 headers 还没发,客户端能拿到 JSON。
+              阶段 2: send_response + headers + end_headers,再 shutil.copyfileobj
+                     分块流式(64KB),finally 关闭 f。
+        """
+        try:
+            f = open(path_abs, "rb")
+        except OSError as e:
+            return self._json(500, {"error": f"open fail: {e}"})
+        try:
+            size = os.fstat(f.fileno()).st_size
+            self.send_response(status)
+            self.send_header("Content-Type", ctype)
+            self.send_header("Content-Length", str(size))
+            self.send_header("Access-Control-Allow-Origin", "*")
+            self.end_headers()
             shutil.copyfileobj(f, self.wfile, length=64 * 1024)
+        finally:
+            f.close()
 
     def _row_to_dict(self, row):
         return {k: row[k] for k in row.keys()}
