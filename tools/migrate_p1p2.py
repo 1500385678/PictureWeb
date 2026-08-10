@@ -156,6 +156,12 @@ def main():
         print("🔧 重建 images_fts (含 description + arch_type)")
         if not args.dry_run:
             conn.execute("DROP TABLE IF EXISTS images_fts")
+            # P1 (Verifier 批 4 行 185):tokenize 改 trigram(SQLite 3.34+ 内置
+            # trigram),对中文按 3 字符滑窗分词,?q=现代 能命中 '中建·现代风格_03'
+            # 之类。trigram 索引最小串 3 字符,query 至少 3 字符才命中;1-2 字符
+            # 中文 query 仍会 0 条,前端要提示"至少 3 字符"。unicode61 对中文
+            # 不可用(按字节/标点切),?q=现代 / ?q=客厅 全 0 命中,只剩 LIKE
+            # 子串兜底,治标不治本。
             conn.execute("""
                 CREATE VIRTUAL TABLE images_fts USING fts5(
                     id UNINDEXED,
@@ -169,7 +175,7 @@ def main():
                     mood,
                     light,
                     arch_type,
-                    tokenize = "unicode61 remove_diacritics 2"
+                    tokenize = "trigram"
                 )
             """)
             # arch_type 来源: 优先 image_arch_types 多值关联表(空格拼接),

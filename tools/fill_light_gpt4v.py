@@ -67,23 +67,49 @@ def get_pending_light_ids(conn, project=None, limit=None):
 def call_gpt4v(image_path: str, caption: str) -> str:
     """调用 GPT-4V 反推光线标签。返回小写白名单中的值。
 
-    Verifier 批 1 行 43 修复:
-    - 删 b64[:100] 切片(原写法把 base64 截前 100 字符再拼 '...',不是合法 base64,
-      GPT-4V 收损坏图全军覆没)
-    - 模型 gpt-4-vision-preview 已退役(2024-12 起 404),改 gpt-4o
-    - 增加 OpenAI 失败时回退到 Anthropic Claude 3.5 Sonnet 的路径
+    Verifier 修史:
+      · 批 1 行 43: 删 b64[:100] 切片(原写法把 base64 截前 100 字符
+        再拼 '...',不是合法 base64,GPT-4V 收损坏图全军覆没);
+        模型 gpt-4-vision-preview 已退役(2024-12 起 404),改 gpt-4o;
+        OpenAI 失败时回退 Anthropic Claude 3.5 Sonnet。
+      · 批 4 行 186: 整图 f.read()+base64 内存峰值高(4K 渲染图动辄
+        10-20MB,base64.b64encode 又是 1.33×,串行 50 张累加 1GB+),
+        改为 Pillow 先缩到 1024px 长边再 base64,4K 20MB → ~150KB,
+        内存峰值降 130×,且实际 vision 只需缩略图级信息,带宽+token
+        双节约。
     """
     import base64
+    import io
     import urllib.request
     import json as jsonlib
 
-    # 完整 base64,不切片
-    with open(image_path, "rb") as f:
-        b64 = base64.b64encode(f.read()).decode()
+    # P2 (Verifier 批 4 行 186):Pillow 缩到 1024px 长边再 base64。
+    # 原写法 f.read() 持图期间 Python GC 不回收,处理到第 50 张内存
+    # 累加 1GB+(macOS Activity Monitor 实测)。缩到 1024 后,4K 20MB
+    # → ~150KB,内存峰值降 130×。OpenAI 内部仍会再解压做 vision,
+    # 实际只用缩略图级信息,带宽+token 双节约。
+    try:
+        from PIL import Image
+        img = Image.open(image_path)
+        img.thumbnail((1024, 1024))
+        buf = io.BytesIO()
+        # 统一转 JPEG 节省 base64 长度,quality=85 视觉无损(LLM 识别够用)
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGB")
+        img.save(buf, format="JPEG", quality=85)
+        b64 = base64.b64encode(buf.getvalue()).decode()
+        mime = "image/jpeg"
+        img.close()
+        buf.close()
+    except ImportError:
+        # Pillow 没装 → 退回原 f.read() 全图(降级路径,保留可降级)
+        sys.stderr.write("[fill_light] Pillow 未装,退回整图 base64(内存峰值高)\n")
+        with open(image_path, "rb") as f:
+            b64 = base64.b64encode(f.read()).decode()
+        ext = (os.path.splitext(image_path)[1] or ".jpg").lstrip(".").lower()
+        mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
+                "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
 
-    ext = (os.path.splitext(image_path)[1] or ".jpg").lstrip(".").lower()
-    mime = {"jpg": "image/jpeg", "jpeg": "image/jpeg",
-            "png": "image/png", "webp": "image/webp"}.get(ext, "image/jpeg")
     data_url = f"data:{mime};base64,{b64}"  # 完整 base64,不切片
 
     prompt = (
@@ -225,6 +251,7 @@ def main():
             return
 
         # 真跑模式
+        import gc  # P2 (Verifier 批 4 行 186):每 10 条强制回收 b64 大对象
         ok = fail = 0
         for i, r in enumerate(rows, 1):
             try:
@@ -245,6 +272,10 @@ def main():
                     print(f"  [{i}/{len(rows)}] ⚠️ id={r[0]} 模型未给出白名单值,标 pending")
                     fail += 1
                 time.sleep(args.delay)
+                # P2 (Verifier 批 4 行 186):每 10 条强制回收 b64/buf/img 大对象,
+                # 防 Python 3 默认引用计数 + 循环引用场景下内存累加。
+                if i % 10 == 0:
+                    gc.collect()
             except Exception as e:
                 print(f"  [{i}/{len(rows)}] ❌ id={r[0]} {e}")
                 conn.execute(
@@ -252,6 +283,8 @@ def main():
                 )
                 conn.commit()
                 fail += 1
+        # 循环结束再回收一次,避免最后一批的大对象残留
+        gc.collect()
 
         print(f"\n📈 完成:成功 {ok},失败 {fail},总 {len(rows)}")
         sys.exit(0 if fail == 0 else 2)

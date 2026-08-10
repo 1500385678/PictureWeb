@@ -13,7 +13,7 @@
 - 建筑师的参考图与效果图库
 - 项目级(中建·玖上琅宸 / 好莱坞山豪宅 等)按子目录组织的素材池
 - 多维标签检索(项目 × 场景 × 光线 × 空间 × 材质 × 情绪 × 建筑类型 × 渲染风格)
-- FTS5 全文 + pHash 以图搜图 双引擎
+- FTS5 trigram 全文(tokenize="trigram",中文按 3 字符滑窗分词) + pHash 以图搜图 双引擎
 - 端口 8081 的本地 HTTP 服务 · stdlib 零依赖
 
 **不是**
@@ -49,3 +49,5 @@ ID 校验时三种写法都要接受,见 IDENTITY.md 别名表。
 
 - 2026-08-05:长史创建
 - 2026-08-06:pictureweb-coder 夜间批 1 完成 5 项修复,P0/P1/P2 阶段通过
+- 2026-08-09:pictureweb-coder 夜间批 1/批 2/批 3 共 12 条意见全闭环(P0×5 / P1×3 / P2×3 + hamming_hex 修复)
+- 2026-08-11:pictureweb-coder 夜间批 1 (00:00) FTS5 tokenize 改 trigram,`/search` 加 ORDER BY bm25 相关度排序 + Pillow 缩到 1024 + 健康检查合并 conn(4 条意见)

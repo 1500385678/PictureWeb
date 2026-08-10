@@ -118,26 +118,34 @@ class Handler(BaseHTTPRequestHandler):
     server_version = "PictureWeb/1.0"
 
     # ---------- 工具方法 ----------
-    def _check_fts_health(self) -> tuple[bool, str]:
-        """P1-d (Verifier 批 2 行 115):探测 images_fts 是否存在 + 可用。
-        入口先 SELECT name FROM sqlite_master WHERE name='images_fts' 探测,
-        缺失或不可访问直接返回 (False, detail),由 /search 入口转 503,
-        不进 try/except 静默降级。"""
+    def _check_fts_health(self, conn) -> tuple[bool, str]:
+        """P1-d (Verifier 批 2 行 115) + P1 合并 (Verifier 批 4 行 184):
+        探测 images_fts 是否存在 + 可用。
+
+        早期版每次 /search 开两个 sqlite3 连接:_check_fts_health 自己
+        get_conn()+conn.close() 跑 sqlite_master 探测,line 221 又开新
+        conn 跑 MATCH。本版改为接受调用方传入的 conn:同一个连接既
+        探测又查询,省一次 round-trip,避免"探测 ok 但查询时表被并发
+        DROP 状态不一致"。
+
+        探测失败直接 (False, detail),由 /search 入口转 503,
+        不进 try/except 静默降级。except 链覆盖 OperationalError +
+        DatabaseError + 兜底 sqlite3.Error(InterfaceError 之类)。
+        """
         try:
-            conn = get_conn()
-            try:
-                row = conn.execute(
-                    "SELECT name FROM sqlite_master WHERE name = 'images_fts'"
-                ).fetchone()
-            finally:
-                conn.close()
-            if not row:
-                return False, "images_fts table missing"
-            return True, "ok"
+            row = conn.execute(
+                "SELECT name FROM sqlite_master WHERE name = 'images_fts'"
+            ).fetchone()
         except sqlite3.OperationalError as e:
             return False, f"images_fts probe failed: {e}"
         except sqlite3.DatabaseError as e:
             return False, f"db error: {e}"
+        except sqlite3.Error as e:
+            # 兜底非预期家族(InterfaceError 等) — Verifier 批 4 行 184
+            return False, f"sqlite error: {e}"
+        if not row:
+            return False, "images_fts table missing"
+        return True, "ok"
 
     def _json(self, status: int, payload):
         body = json.dumps(payload, ensure_ascii=False, indent=2).encode("utf-8")
@@ -219,23 +227,26 @@ class Handler(BaseHTTPRequestHandler):
             if not q:
                 return self._json(400, {"error": "missing q"})
 
-            # P1-d (Verifier 批 2 行 115):入口先探测 images_fts 健康,
-            # 缺表直接 503,不进 try/except 静默降级(旧版返 200+warning
-            # 让前端以为成功,FTS 真正失败信号被埋)。
-            healthy, detail = self._check_fts_health()
-            if not healthy:
-                sys.stderr.write(f"[FTS-FAIL] {detail}\n")
-                sys.stderr.flush()
-                return self._json(503, {
-                    "error": "service unavailable",
-                    "service": "fts5",
-                    "detail": detail,
-                    "recoverable": True,
-                })
-
+            # P1-d (Verifier 批 2 行 115) + P1 合并 (Verifier 批 4 行 184):
+            # 一个 conn 既做健康探测又跑 MATCH,省一次 round-trip,避免
+            # 探测 ok 但查询时表被并发 DROP 状态不一致。健康失败转 503,
+            # 不静默降级(旧版返 200+warning 让前端以为成功,FTS 真正
+            # 失败信号被埋)。
             conn = get_conn()
             try:
-                # FTS5:对中文已 tokenize,直接 MATCH
+                healthy, detail = self._check_fts_health(conn)
+                if not healthy:
+                    sys.stderr.write(f"[FTS-FAIL] {detail}\n")
+                    sys.stderr.flush()
+                    return self._json(503, {
+                        "error": "service unavailable",
+                        "service": "fts5",
+                        "detail": detail,
+                        "recoverable": True,
+                    })
+
+                # FTS5:trigram tokenize 支持中文子串匹配(P1 批 4 行 185)
+                # ORDER BY bm25(images_fts) 按相关度升序(负数越小越相关)
                 sql = """
                     SELECT i.id, i.rel_path, i.abs_path, i.filename,
                            i.caption, i.description, i.project,
@@ -244,6 +255,7 @@ class Handler(BaseHTTPRequestHandler):
                     FROM images_fts f
                     JOIN images i ON i.id = f.id
                     WHERE images_fts MATCH ?
+                    ORDER BY bm25(images_fts)
                     LIMIT ?
                 """
                 rows = conn.execute(sql, (q, limit)).fetchall()
@@ -256,6 +268,26 @@ class Handler(BaseHTTPRequestHandler):
                 # 真正失败(索引表被外部脚本 DROP、tokenize 参数版本不兼容、
                 # 表锁)时不再伪装 200,改 503 + errors 数组,前端 5xx retry。
                 sys.stderr.write(f"[FTS-FAIL] query OperationalError: {e}\n")
+                sys.stderr.flush()
+                return self._json(503, {
+                    "error": "service unavailable",
+                    "service": "fts5",
+                    "detail": str(e),
+                    "recoverable": True,
+                })
+            except sqlite3.DatabaseError as e:
+                # 兜底 DatabaseError 家族(IntegrityError 等)
+                sys.stderr.write(f"[FTS-FAIL] query DatabaseError: {e}\n")
+                sys.stderr.flush()
+                return self._json(503, {
+                    "error": "service unavailable",
+                    "service": "fts5",
+                    "detail": str(e),
+                    "recoverable": True,
+                })
+            except sqlite3.Error as e:
+                # 兜底非预期家族(InterfaceError 等) — Verifier 批 4 行 184
+                sys.stderr.write(f"[FTS-FAIL] query sqlite3.Error: {e}\n")
                 sys.stderr.flush()
                 return self._json(503, {
                     "error": "service unavailable",
