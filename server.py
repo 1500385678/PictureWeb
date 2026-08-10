@@ -17,6 +17,7 @@ import shutil
 import sqlite3
 import sys
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+from typing import Optional
 from urllib.parse import urlparse, parse_qs
 
 # 路径
@@ -74,12 +75,26 @@ def get_conn():
     return conn
 
 
-def hamming_hex(a: str, b: str) -> int:
-    """两个 16 进制 phash 字符串的汉明距离 (按 bit 比)"""
+def hamming_hex(a: str, b: str) -> Optional[int]:
+    """两个 16 进制 phash 字符串的汉明距离 (按 bit 比)。
+
+    返回:
+      - int   : 有效汉明距离 (0~len*4),表示"两张图不同 bit 数"
+      - None  : 输入格式错 (空 / 长度不匹配 / 非 hex),与"不相似"明确区分
+
+    P0 (Verifier 批 4 行 182,2026-08-10):旧版把'格式错'和'不相似'都塞 -1,
+    `int('ZZZZ', 16)` 又抛 ValueError 触发 BaseHTTPRequestHandler 默认
+    traceback → 客户端 500 空 body。改返 None 让 /phash 入口自行区分:
+    - d is None  → 前端弹 "phash 格式错,请重传"
+    - d is int   → 看 d<=10 决定 similar
+    """
     if not a or not b or len(a) != len(b):
-        return -1
-    ba = bin(int(a, 16))[2:].zfill(len(a) * 4)
-    bb = bin(int(b, 16))[2:].zfill(len(b) * 4)
+        return None
+    try:
+        ba = bin(int(a, 16))[2:].zfill(len(a) * 4)
+        bb = bin(int(b, 16))[2:].zfill(len(b) * 4)
+    except ValueError:
+        return None
     return sum(x != y for x, y in zip(ba, bb))
 
 
@@ -309,8 +324,15 @@ class Handler(BaseHTTPRequestHandler):
             }
             if other:
                 d = hamming_hex(row["phash"] or "", other)
+                # P0 (Verifier 批 4 行 182,2026-08-10):hamming_hex 改返 None
+                # 区分'格式错'与'不相似'。前端逻辑:
+                #   - d is None  → other_format_error=True,弹 "phash 格式错,请重传"
+                #   - d <= 10    → similar=True,展示为相似
+                #   - d > 10     → similar=False,展示为不相似
                 payload["hamming_distance_to_other"] = d
-                payload["similar"] = d >= 0 and d <= 10
+                payload["similar"] = d is not None and d <= 10
+                if d is None:
+                    payload["other_format_error"] = True
             return self._json(200, payload)
 
         # 404
