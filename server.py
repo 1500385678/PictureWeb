@@ -27,17 +27,23 @@ DB_PATH = os.environ.get(
 )
 PORT = int(os.environ.get("PICTUREDB_PORT", "8081"))
 
-# 路径白名单(P1 防御,Verifier 批 1 行 45 + 批 2 行 114):
-# /image 端点 abs_path 是任意绝对路径,虽然 127.0.0.1 风险低,
-# 但哪天绑 0.0.0.0 或外部脚本注入路径(/etc/passwd 等),秒变 path traversal。
-# 只允许发白名单根下的文件,用 realpath 防 symlink 绕过(P1-c 批 2 行 114:
-# startswith 会被"~/Pictures-evil"前缀撞车绕过,改用 os.path.commonpath)。
+# 路径白名单(P0 收紧,Verifier 批 4 行 237):
+# 批 1/批 2 用 `~/Mac/WorkTeam/05_Space`(整 05_Space)和 `~/Pictures`
+# 太宽 — 前者把 _ArchitectLib 全开放(任何 .py/.md/.db 都能拉),
+# 后者用户相册也漏出。批 4 改为精确白名单,只允许 images.abs_path
+# 实际存在的子目录:DB 实测 390 张全在 03_Architect/Mobile/(01-Master/
+# 03-Residence/04-Block/07-Rending 四个子目录)。要扩白名单就加环境
+# 变量 PICTUREDB_ALLOWED_ROOTS(冒号分隔,Linux/Mac 风格),不要改代码。
+_DEFAULT_ALLOWED = (
+    "~/Mac/WorkTeam/05_Space/03_Architect/Mobile",
+)
 ALLOWED_ROOTS = tuple(
-    os.path.realpath(p)
+    os.path.realpath(os.path.expanduser(p))
     for p in (
-        os.path.expanduser("~/Mac/WorkTeam/05_Space"),
-        os.path.expanduser("~/Pictures"),
-    )
+        os.environ.get("PICTUREDB_ALLOWED_ROOTS")
+        or ":".join(_DEFAULT_ALLOWED)
+    ).split(":")
+    if p.strip()
 )
 
 
