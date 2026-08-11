@@ -46,6 +46,20 @@ ALLOWED_ROOTS = tuple(
     if p.strip()
 )
 
+# 扩展名白名单(P0 防御,Verifier 批 5 行 237 / 2026-08-11):
+# 之前 ctype fallback 是 application/octet-stream,意味着库内 abs_path
+# 哪怕填了 .ssh/id_rsa 也能 200 流式出去(白名单只管目录,不管后缀)。
+# 现在 /image 端点先看后缀是否在白名单,不在直接 403,补上 ctype 兜底
+# 漏洞。库 schema 不限扩展名(images.ext 是 TEXT),所以兜底不能省。
+ALLOWED_EXTS = {".jpg", ".jpeg", ".png", ".webp", ".gif", ".bmp", ".tiff"}
+
+# DB 最小尺寸(P0 防御,Verifier 批 5 行 238 / 2026-08-11):
+# 4096 字节是 images 表(单行 ~150B 元数据)+ images_fts 元数据 +
+# sqlite_master 页头 + headers 的最小尺寸;低于这个值基本是空库
+# / .DS_Store / 备份覆盖错版本,启动会留隐患 — 巡检时看不到但
+# /search 上来就 503。main() 启动前先校验。
+_DB_MIN_SIZE = 4096
+
 
 def is_under(path: str, roots) -> bool:
     """判断 path 是否在 roots 任意一根目录下。用 os.path.commonpath 防
@@ -81,26 +95,46 @@ def get_conn():
     return conn
 
 
-def hamming_hex(a: str, b: str) -> Optional[int]:
+def validate_hex(s, expected_len: int = 16) -> Optional[int]:
+    """校验 hex 字符串格式,返 expected_len 表示"合法 N hex (N*4 bit)"。
+
+    判错条件:非 str / 空 / 长度不等于 expected_len / 含非 hex 字符。
+    返回值:None = 错(给 /phash 端点用),int = 实际有效 bit 数(成功)。
+
+    P2 (Verifier 批 5 行 241 / 2026-08-11):拆出来便于 row/origin 分别校验,
+    把"row 库内 phash 格式错"和"other 用户传格式错"区分开,前端能定位
+    到底是 DB 污染还是用户输错。
+    """
+    if not s or not isinstance(s, str):
+        return None
+    if len(s) != expected_len:
+        return None
+    try:
+        int(s, 16)
+    except ValueError:
+        return None
+    return expected_len * 4
+
+
+def hamming_hex(a: str, b: str, expected_len: int = 16) -> Optional[int]:
     """两个 16 进制 phash 字符串的汉明距离 (按 bit 比)。
 
     返回:
-      - int   : 有效汉明距离 (0~len*4),表示"两张图不同 bit 数"
+      - int   : 有效汉明距离 (0~expected_len*4),表示"两张图不同 bit 数"
       - None  : 输入格式错 (空 / 长度不匹配 / 非 hex),与"不相似"明确区分
 
-    P0 (Verifier 批 4 行 182,2026-08-10):旧版把'格式错'和'不相似'都塞 -1,
-    `int('ZZZZ', 16)` 又抛 ValueError 触发 BaseHTTPRequestHandler 默认
-    traceback → 客户端 500 空 body。改返 None 让 /phash 入口自行区分:
-    - d is None  → 前端弹 "phash 格式错,请重传"
-    - d is int   → 看 d<=10 决定 similar
+    修史:
+    · P0 (Verifier 批 4 行 182,2026-08-10):旧版把'格式错'和'不相似'都塞 -1,
+      `int('ZZZZ', 16)` 又抛 ValueError 触发 BaseHTTPRequestHandler 默认
+      traceback → 客户端 500 空 body。改返 None 让 /phash 入口自行区分。
+    · P2 (Verifier 批 5 行 241 / 2026-08-11):用 validate_hex 拆出格式校验,
+      row/origin 各自失败能归因到具体一方(调用方在 /phash 端点比对,
+      返 row_format_error / other_format_error 字段,前端分类提示)。
     """
-    if not a or not b or len(a) != len(b):
+    if validate_hex(a, expected_len) is None or validate_hex(b, expected_len) is None:
         return None
-    try:
-        ba = bin(int(a, 16))[2:].zfill(len(a) * 4)
-        bb = bin(int(b, 16))[2:].zfill(len(b) * 4)
-    except ValueError:
-        return None
+    ba = bin(int(a, 16))[2:].zfill(expected_len * 4)
+    bb = bin(int(b, 16))[2:].zfill(expected_len * 4)
     return sum(x != y for x, y in zip(ba, bb))
 
 
@@ -170,7 +204,7 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(body)
 
-    def _stream_file(self, status: int, path_abs: str, ctype: str):
+    def _stream_file(self, status: int, path_abs: str, ctype: str, expected_real: str = None, expected_inode: int = None):
         """流式发送文件,先发 Content-Length 头,64KB 分块写,避免大文件 OOM。
         Verifier 修史:
           · P0-a (批 2 行 42): 之前 `f.read()` 一次读全部,DB 错填 1GB 源文件
@@ -183,12 +217,30 @@ class Handler(BaseHTTPRequestHandler):
                      失败直接 _json(500) — 此时 headers 还没发,客户端能拿到 JSON。
               阶段 2: send_response + headers + end_headers,再 shutil.copyfileobj
                      分块流式(64KB),finally 关闭 f。
+          · P1 (批 5 行 240 / 2026-08-11) TOCTOU 二次校验:realpath → is_under →
+            exists → _stream_file 之间 4 步无锁,migrate_p1p2.py 跑批替换 symlink
+            / 网络盘文件被并发换掉时,白名单可能放过指向 ALLOWED_ROOTS 外的
+            新文件。open 之后再 realpath + fstat 比对 inode,任一不等 → 403。
         """
         try:
             f = open(path_abs, "rb")
         except OSError as e:
             return self._json(500, {"error": f"open fail: {e}"})
         try:
+            # P1 TOCTOU 二次校验(open 之后,headers 之前,失败时 headers 还没发)
+            if expected_real is not None:
+                current_real = os.path.realpath(path_abs)
+                if current_real != expected_real:
+                    return self._json(403, {
+                        "error": "path drifted, possible TOCTOU",
+                        "real": current_real,
+                    })
+            inode_now = os.fstat(f.fileno()).st_ino
+            if expected_inode is not None and inode_now != expected_inode:
+                return self._json(403, {
+                    "error": "file replaced, possible TOCTOU",
+                    "inode": inode_now,
+                })
             size = os.fstat(f.fileno()).st_size
             self.send_response(status)
             self.send_header("Content-Type", ctype)
@@ -327,6 +379,20 @@ class Handler(BaseHTTPRequestHandler):
             real = os.path.realpath(path_abs) if path_abs else ""
             if not real or not is_under(real, ALLOWED_ROOTS):
                 return self._json(403, {"error": "path not allowed", "path": real})
+            # P0 (Verifier 批 5 行 237 / 2026-08-11) 扩展名白名单:
+            # 库 schema 不限 images.ext(可能是 .ssh/id_rsa 等敏感后缀),
+            # ctype fallback 是 application/octet-stream 兜底 → 200 流式发
+            # 任意文件 = path traversal 0day。放 exists 之前 — 不泄露"非图
+            # 文件是否存在",且即便 file 缺失,也立刻 403 而非 404 让攻击者
+            # 区分 "DB 引用了非法后缀" vs "DB 引用了合法后缀但文件没了"。
+            from pathlib import Path
+            ext_suffix = Path(path_abs).suffix.lower()
+            if ext_suffix not in ALLOWED_EXTS:
+                return self._json(403, {
+                    "error": "extension not allowed",
+                    "ext": ext_suffix,
+                    "allowed": sorted(ALLOWED_EXTS),
+                })
             # 白名单通过后才检查文件实际存在性 + 二次 mtime 校验(P0-c 增强)
             if not os.path.exists(path_abs):
                 return self._json(404, {"error": "file missing on disk"})
@@ -335,8 +401,17 @@ class Handler(BaseHTTPRequestHandler):
                 "jpg": "image/jpeg", "jpeg": "image/jpeg",
                 "png": "image/png", "webp": "image/webp",
             }.get(ext, "application/octet-stream")
+            # P1 (Verifier 批 5 行 240) TOCTOU 防御:把 realpath 算好的
+            # expected_real 传给 _stream_file,内部 open 后再 realpath 比对,
+            # 同时记 inode,二次 fstat 比 inode,任一不等 → 403。
             try:
-                return self._stream_file(200, path_abs, ctype)
+                expected_inode = os.stat(path_abs).st_ino
+            except OSError:
+                expected_inode = None
+            try:
+                return self._stream_file(200, path_abs, ctype,
+                                         expected_real=real,
+                                         expected_inode=expected_inode)
             except OSError as e:
                 return self._json(500, {"error": f"read fail: {e}"})
 
@@ -361,7 +436,18 @@ class Handler(BaseHTTPRequestHandler):
                 "phash": row["phash"],
             }
             if other:
-                d = hamming_hex(row["phash"] or "", other)
+                # P2 (Verifier 批 5 行 241 / 2026-08-11) row/other 归因:
+                # 用 validate_hex 分别校验 row.phash 和 other,各自失败
+                # 给前端不同信号 — row_format_error 提示 DB 污染(运维修),
+                # other_format_error 提示用户重传。前端从一锅 None 改成分类。
+                row_phash = row["phash"] or ""
+                row_bits = validate_hex(row_phash, 16)
+                other_bits = validate_hex(other, 16)
+                if row_bits is None:
+                    payload["row_format_error"] = True
+                if other_bits is None:
+                    payload["other_format_error"] = True
+                d = hamming_hex(row_phash, other)
                 # P0 (Verifier 批 4 行 182,2026-08-10):hamming_hex 改返 None
                 # 区分'格式错'与'不相似'。前端逻辑:
                 #   - d is None  → other_format_error=True,弹 "phash 格式错,请重传"
@@ -369,8 +455,6 @@ class Handler(BaseHTTPRequestHandler):
                 #   - d > 10     → similar=False,展示为不相似
                 payload["hamming_distance_to_other"] = d
                 payload["similar"] = d is not None and d <= 10
-                if d is None:
-                    payload["other_format_error"] = True
             return self._json(200, payload)
 
         # 404
@@ -392,12 +476,43 @@ class _ThreadingServer(ThreadingHTTPServer):
 
 
 def main():
+    # P0 (Verifier 批 5 行 238 / 2026-08-11) 启动前双重校验:
+    # 1) size 校验 — < 4096 字节基本是空库 / .DS_Store / 备份覆盖错版本,
+    #    images + images_fts 元数据都凑不齐。直接 sys.exit(1) 比跑起来
+    #    等 /search 503 强,巡检 / 长史脚本能立刻看到错。
+    # 2) PRAGMA quick_check — 即使 size 够,库也可能被外部脚本写坏,
+    #    quick_check 返 'ok' 才算完整。返错可能是 page corruption /
+    #    journal 问题,直接拒绝启动(避免 FTS5 防御基于坏库失效)。
     if not os.path.exists(DB_PATH):
         sys.stderr.write(f"[pictureweb] DB not found: {DB_PATH}\n")
         sys.stderr.flush()
         sys.exit(1)
+    db_size = os.path.getsize(DB_PATH)
+    if db_size < _DB_MIN_SIZE:
+        sys.stderr.write(
+            f"[pictureweb] DB too small or missing: {DB_PATH} (size={db_size}, min={_DB_MIN_SIZE})\n"
+        )
+        sys.stderr.flush()
+        sys.exit(1)
+    try:
+        _check_conn = sqlite3.connect(DB_PATH)
+        _check_row = _check_conn.execute("PRAGMA quick_check").fetchone()
+        _check_conn.close()
+    except sqlite3.Error as e:
+        sys.stderr.write(f"[pictureweb] DB open/check failed: {e}\n")
+        sys.stderr.flush()
+        sys.exit(1)
+    if not _check_row or _check_row[0] != "ok":
+        sys.stderr.write(
+            f"[pictureweb] DB integrity check failed: {_check_row[0] if _check_row else 'no result'}\n"
+        )
+        sys.stderr.flush()
+        sys.exit(1)
     httpd = _ThreadingServer(("127.0.0.1", PORT), Handler)
-    sys.stderr.write(f"[pictureweb] listening on http://127.0.0.1:{PORT} (db={DB_PATH})\n")
+    sys.stderr.write(
+        f"[pictureweb] listening on http://127.0.0.1:{PORT} "
+        f"(db={DB_PATH}, size={db_size}, quick_check=ok)\n"
+    )
     sys.stderr.flush()
     try:
         httpd.serve_forever()

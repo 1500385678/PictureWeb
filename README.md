@@ -44,19 +44,23 @@ curl http://127.0.0.1:8081/health   # 验证
 - 排序:ORDER BY bm25(images_fts),负数越小越相关(P0 批 4 行 183)
 - FTS5 引擎不可用(表缺/被 DROP/tokenize 版本不兼容)返 503,不静默降级
 
-## 数据规模(2026-08-09)
+## 数据规模(2026-08-11)
 
 - 索引:390 张图(images 表)
+- 嵌入:187 条(embeddings 表,image→vector 准备 1024D 索引)
+- 标签:59 个(tags 表,业务概念标签)
+- 同义词:317 条(synonyms 表,查询扩展)
+- 搜索日志:21 条(search_log 表,/search 调用历史)
 - arch_type:6 个标签(image_arch_types 表)
 - light 字段空值:89/390(等 LLM 补全或前端手工)
-- DB 大小:~870 KB
+- DB 大小:~1.15 MB
 - FTS5:`?q=hotel` 命中 6 条(arch_type 多值正确索引)
 
 ## 文件结构
 
 ```
 PictureDb/
-├── server.py            # HTTP 入口 · 213 行 · stdlib
+├── server.py            # HTTP 入口 · 527 行 · stdlib
 ├── PictureDb.db         # SQLite + FTS5 + pHash
 ├── thumbs/              # 缩略图(Pillow 生成)
 ├── tools/               # 批量维护脚本
@@ -67,6 +71,8 @@ PictureDb/
 ├── .Workflow/           # 工作流文档
 └── README.md            # 本文件
 ```
+
+<!-- AUTO: lines=527 images=390 embeddings=187 tags=59 synonyms=317 search_log=21 arch_types=6 updated=2026-08-12 -->
 
 ## 不做什么
 
@@ -91,5 +97,5 @@ PictureDb/
 - Coder:pictureweb-coder
 - Verifier:pictureweb-verifier
 - Commander:张勇
-- 最近巡检:2026-08-10 23:15
-- 最近迭代:2026-08-11 00:00(批 1 (00:00) · 4/4 闭环 P0+P1×2+P2)
+- 最近巡检:2026-08-11 23:15
+- 最近迭代:2026-08-12 00:00(批 2 (00:00) · 5/5 闭环 P0×2+P1×2+P2)
