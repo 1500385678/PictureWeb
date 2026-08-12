@@ -17,6 +17,14 @@
   - P1 server.py 三处参数 try/except 转 400
   - P1 server.py ALLOWED_ROOTS 路径白名单(realpath 防 symlink)
   - P2 .Core/MEMORY.md + HEARTBEAT.md + 顶层 README.md 充实
+- 2026-08-13 00:00:夜间批 1 (00:00) · 2 轮重开 · 5 项核验
+  - 5 项全部已在历史 commit 完成(cbed616/d8108f4 系列),无新代码改动
+  - 核验 P0 push 状态:HEAD=a7e136c 已在 origin/master + gitee/master 双远端
+  - 核验 P1 aliases:.Core/IDENTITY.md:12 [PictureWeb, PictureDb, pictureweb] 3 个 ✅
+  - 核验 P1 arch_type:image_arch_types 表 6 行 + images_fts 列 10 索引纳入 ✅
+  - 核验 P1 light:fill_light_gpt4v.py dry-run 89/390 待补(无 key 走 ⚠️ 路径)✅
+  - 核验 P2 description:fill_description_default.py dry-run 0/390 空(已满)✅
+  - 闭环状态:5/5 核验通过 · 0 新代码改动 · 1 单 commit · push 双远端
 
 ## 不写在这里
 
