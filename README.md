@@ -30,7 +30,7 @@ curl http://127.0.0.1:8081/health   # 验证
 | 方法 | 路径 | 说明 |
 |---|---|---|
 | GET | `/` 或 `/health` | 健康检查 + 端点清单(JSON)|
-| GET | `/search?q=<query>&limit=<1-100>` | FTS5 trigram 全文检索,默认 20 条,上限 100;结果按 bm25 相关度升序 |
+| GET | `/search?q=<query>&limit=<1-100>` | FTS5 trigram 全文检索,默认 20 条,上限 100;结果按 bm25 相关度升序。query 含 FTS5 操作符(`*"():NEAR/AND/OR/NOT`)返 400 `invalid query syntax` |
 | GET | `/image?id=<id>` | 按 id 流式发图(64KB 分块) |
 | GET | `/phash?id=<id>&other=<hex>` | 16 hex pHash + 可选汉明距离(≤10 视为相似)|
 
@@ -43,6 +43,7 @@ curl http://127.0.0.1:8081/health   # 验证
 - 英文按词匹配(unicode61 不再用,trigram 兼容英文但粒度更细)
 - 排序:ORDER BY bm25(images_fts),负数越小越相关(P0 批 4 行 183)
 - FTS5 引擎不可用(表缺/被 DROP/tokenize 版本不兼容)返 503,不静默降级
+- query 含 FTS5 操作符(`*"()\:NEAR/AND/OR/NOT`)返 400 `invalid query syntax`(P0 批 6 行 312),不要拼到 query 字符串
 
 ## 数据规模(2026-08-11)
 
@@ -60,7 +61,7 @@ curl http://127.0.0.1:8081/health   # 验证
 
 ```
 PictureDb/
-├── server.py            # HTTP 入口 · 527 行 · stdlib
+├── server.py            # HTTP 入口 · 563 行 · stdlib
 ├── PictureDb.db         # SQLite + FTS5 + pHash
 ├── thumbs/              # 缩略图(Pillow 生成)
 ├── tools/               # 批量维护脚本
@@ -72,7 +73,7 @@ PictureDb/
 └── README.md            # 本文件
 ```
 
-<!-- AUTO: lines=527 images=390 embeddings=187 tags=59 synonyms=317 search_log=21 arch_types=6 updated=2026-08-12 -->
+<!-- AUTO: lines=563 images=390 embeddings=187 tags=59 synonyms=317 search_log=21 arch_types=6 updated=2026-08-12 -->
 
 ## 不做什么
 

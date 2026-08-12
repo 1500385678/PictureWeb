@@ -303,6 +303,41 @@ class Handler(BaseHTTPRequestHandler):
                         "recoverable": True,
                     })
 
+                # P0 (Verifier 批 6 行 312 / 2026-08-12 23:15):
+                # query 含 FTS5 操作符(`*"()\:NEAR/AND/OR/NOT` 等)
+                # 会触发 sqlite3.OperationalError("fts5: syntax error" 等),
+                # 旧版把所有 OperationalError 返 503,语义错位(用户输入错 → 400,
+                # 不是服务端故障)。预检命中 FTS5 语法关键字时返 400 + 提示,
+                # 其他 OperationalError 仍走 503 兜底。
+                try:
+                    conn.execute(
+                        "SELECT id FROM images_fts WHERE images_fts MATCH ? LIMIT 1",
+                        (q,),
+                    ).fetchone()
+                except sqlite3.OperationalError as e:
+                    msg = str(e).lower()
+                    fts_syntax_markers = (
+                        "fts5: syntax error",
+                        "fts5: near",
+                        "fts5: parse error",
+                        "fts5: unmatched",
+                    )
+                    if any(mk in msg for mk in fts_syntax_markers):
+                        sys.stderr.write(
+                            f"[FTS-SYNTAX-ERR] q={q!r} msg={e}\n"
+                        )
+                        sys.stderr.flush()
+                        return self._json(400, {
+                            "error": "invalid query syntax",
+                            "param": "q",
+                            "detail": str(e),
+                            "hint": (
+                                "FTS5 操作符(* \" ( ) : NEAR AND OR NOT)"
+                                "需双引号包或转义"
+                            ),
+                        })
+                    # 非语法错的 OperationalError 留给外层 except 兜 503
+
                 # FTS5:trigram tokenize 支持中文子串匹配(P1 批 4 行 185)
                 # ORDER BY bm25(images_fts) 按相关度升序(负数越小越相关)
                 sql = """
