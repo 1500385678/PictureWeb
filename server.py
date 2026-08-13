@@ -413,7 +413,12 @@ class Handler(BaseHTTPRequestHandler):
             # 403 path not allowed,只有白名单通过的路径才报 404 file missing。
             real = os.path.realpath(path_abs) if path_abs else ""
             if not real or not is_under(real, ALLOWED_ROOTS):
-                return self._json(403, {"error": "path not allowed", "path": real})
+                # P0 (Verifier 批 6 行 362 / 2026-08-13):越界拒绝时不再回传
+                # realpath / path 字段。攻击者(即便 127.0.0.1 风险低,P1 扩 LAN
+                # 时代价立现)可先注入 abs_path=/Users/aaron/.ssh/known_hosts 配合
+                # 法后缀拿 403+真实路径,再换 /etc/passwd 等越界库,信息泄露。
+                # 统一只返 {"error":..., "allowed": False}。
+                return self._json(403, {"error": "path not allowed", "allowed": False})
             # P0 (Verifier 批 5 行 237 / 2026-08-11) 扩展名白名单:
             # 库 schema 不限 images.ext(可能是 .ssh/id_rsa 等敏感后缀),
             # ctype fallback 是 application/octet-stream 兜底 → 200 流式发
@@ -423,9 +428,11 @@ class Handler(BaseHTTPRequestHandler):
             from pathlib import Path
             ext_suffix = Path(path_abs).suffix.lower()
             if ext_suffix not in ALLOWED_EXTS:
+                # P0 (Verifier 批 6 行 362 / 2026-08-13):删 ext 字段回传。
+                # 攻击者可枚举 DB 里所有后缀(.ssh/.bashrc/.key 等),只回
+                # allowed 列表布尔,避免后缀信息泄露。
                 return self._json(403, {
                     "error": "extension not allowed",
-                    "ext": ext_suffix,
                     "allowed": sorted(ALLOWED_EXTS),
                 })
             # 白名单通过后才检查文件实际存在性 + 二次 mtime 校验(P0-c 增强)
