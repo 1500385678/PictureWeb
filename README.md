@@ -1,86 +1,89 @@
 # PictureWeb
 
-> 建筑效果图与参考图的多维标签库 · 8081 端口 · Python stdlib + SQLite FTS5
-
-## 这是什么
-
-PictureWeb = `~/Mac/WorkTeam/05_Space/03_Architect/_ArchitectLib/PictureDb/`。
-建筑效果图的入库、检索、以图搜图服务。三种写法都指向同一个项目:
-
-| 场合 | 写法 |
-|---|---|
-| 正式引用 / Control / Cron | **PictureWeb** |
-| 文件目录 | **PictureDb** |
-| 命令行 / 日志 / 进程名 | **pictureweb** |
+> 独立的图库检索系统。多维标签 + 全文搜索 + AI 语义搜 + 以图搜图。
+> 端口 **8081** · Python 标准库 + Pillow · 零 npm 依赖。
 
 ## 启动
 
 ```bash
-cd /Users/aaron/Mac/WorkTeam/05_Space/03_Architect/_ArchitectLib/PictureDb/
-python3 -X utf8 server.py &
-curl http://127.0.0.1:8081/health   # 验证
+# Windows
+python -X utf8 server.py
+# 或
+双击 start.bat
 ```
 
-依赖:Python 3.10+(stdlib only,无 pip install)。
-可选:Pillow(缩略图 `thumbs/`)、OPENAI_API_KEY 或 ANTHROPIC_API_KEY(LLM 补全光线字段)。
+打开 **http://127.0.0.1:8081/**
 
-## 端点
+## 功能
 
-| 方法 | 路径 | 说明 |
-|---|---|---|
-| GET | `/` 或 `/health` | 健康检查 + 端点清单(JSON)|
-| GET | `/search?q=<query>&limit=<1-100>` | FTS5 全文检索,默认 20 条,上限 100 |
-| GET | `/image?id=<id>` | 按 id 流式发图(64KB 分块) |
-| GET | `/phash?id=<id>&other=<hex>` | 16 hex pHash + 可选汉明距离(≤10 视为相似)|
+- 🔍 多维标签检索(project / scene / light / space / material / mood / arch / company / view)
+- ⚡ FTS5 全文搜索(中文 2-gram 分词)
+- 🤖 AI 语义搜索(需 `embedding.py` 兄弟模块)
+- 🖼️ 以图搜图(PIL pHash)
+- ⭐ 收藏夹
 
-错误统一 JSON:`{"error": "...", "param": "..."}`,状态码 400/403/404/500。
+## 依赖
 
-## 数据规模(2026-08-09)
+- Python 3.10+ 标准库
+- `Pillow`(phash 计算)· `pip install Pillow`
+- 共用 `_ArchitectLib/PictureDb/PictureDb.db`(兄弟模块,不动)
+- 图片根 `D:\Mac\Mac\workteam\05_space\03_architect\Mobile`
 
-- 索引:390 张图(images 表)
-- arch_type:6 个标签(image_arch_types 表)
-- light 字段空值:89/390(等 LLM 补全或前端手工)
-- DB 大小:~870 KB
-- FTS5:`?q=hotel` 命中 6 条(arch_type 多值正确索引)
+## API
 
-## 文件结构
+| Method | Path | 权限 | 说明 |
+|--------|------|------|------|
+| GET | `/api/search?` | 公开 | 多维搜索 |
+| GET | `/api/facets` | 公开 | 9 维标签去重值 |
+| GET | `/api/favorites` | 公开 | 收藏列表 |
+| POST | `/api/favorites` | 本机 | 切换收藏 |
+| GET | `/api/semantic_search?q=` | 公开 | AI 语义搜(GET 方式) |
+| POST | `/api/semantic_search` | 本机 | AI 语义搜(POST 方式) |
+| POST | `/api/upload_search` | 本机 | 以图搜图 |
+| POST | `/api/ai_image` | 本机 | AI 生图(matrix MCP) |
+| POST | `/api/intent_search` | 本机 | **v2.0.6** AI 找参考(自然语言设计意图 → top 5 案例 + reasons 解释) |
+| GET | `/img/<相对路径>` | 公开 | 图片直出 |
+
+> 权限"本机"=`127.0.0.1` / `192.168.181.136` / `::1`,见 `server.py:ADMIN_IPS`
+
+## 目录
 
 ```
-PictureDb/
-├── server.py            # HTTP 入口 · 213 行 · stdlib
-├── PictureDb.db         # SQLite + FTS5 + pHash
-├── thumbs/              # 缩略图(Pillow 生成)
-├── tools/               # 批量维护脚本
-│   ├── fill_light_gpt4v.py          # 光线 LLM 补全
-│   ├── fill_description_default.py # 描述降级(caption+keywords)
-│   └── migrate_p1p2.py              # P1/P2 schema 迁移
-├── .Core/               # 项目骨架 10 件套
-├── .Workflow/           # 工作流文档
-└── README.md            # 本文件
+PictureWeb/
+├── server.py            # 后端(约 420 行 · 单文件)
+├── index.html           # 搜索主页(CSS+JS 内嵌)
+├── start.bat            # Windows 启动
+├── start.sh             # macOS/Linux 启动
+├── start_hidden.vbs     # 无窗口启动(2026-07-22 v2.0.3:加错误处理+日志)
+├── libraryControl.md    # 旧 control 文件
+├── LICENSE              # 许可证
+├── favorites.json       # 收藏(运行时,gitignore)
+├── thumbs/              # 缩略图(运行时,gitignore)
+└── server.out/err       # 日志(运行时,gitignore)
 ```
 
-## 不做什么
+## 变更记录
 
-- ❌ 不绑 0.0.0.0(只 127.0.0.1)
-- ❌ 不外发 /image 路径越界(ALLOWED_ROOTS 白名单 · 403)
-- ❌ 不存任何密钥(读环境变量)
-- ❌ 不重写已有缩略图(Pillow 检测到缩略图存在则跳)
-- ❌ 不在 main 之外改 master/HEAD 之外的分支
-- ❌ 不改 .Core/SOUL.md 灵魂内容(J10 审)
+| 日期 | 变更 | 触发 |
+|------|------|------|
+| 2026-08-17 | patch → v2.0.7 + 苹果风 UI 收敛(facets 隐藏 / grid 满屏 8 列 / 卡片紧凑 200px)+ kw-input placeholder 改"搜索"+ .gitignore 收 logs/ / .AutoEvolution/ / _*.py | 美化反馈 + 工作树清理 |
+| 2026-07-24 | minor → v2.0.6 + AI 找参考(POST /api/intent_search · 自然语言设计意图 → top 5 案例 + reasons 解释)+ 生图变体(复用 /api/ai_image 调 matrix MCP)+ 苹果风 UI(header 单行紧凑 / 浅色 / 磨砂玻璃 / pill→rect)+ select 简化为中文标签 | 从"图库"升级为"设计助理" |
+| 2026-07-22 | patch → v2.0.5 + 仓库改 private + start_hidden.vbs 加 PICTUREWEB_TEST_PORT=9001 dev 模式 + git_data_push.py/auto_release.py 默认 REPO 改新仓库 + AGENTS.md §1 改 private | 收尾 v2.0.4 残留 + 修老仓库误推风险 + 开机自启(Startup 快捷方式)|
+| 2026-07-22 | patch → v2.0.4 + git_data_push.py / auto_release.py 加 Windows 用户级环境变量 fallback + 修 origin/local sha 错位 + README 改 port 说明 | mavis bash tool 不读 HKCU\Environment,token 持久化补丁 |
+| 2026-07-22 | patch → v2.0.3 + server.py 端口回归 8081(PICTUREWEB_TEST_PORT env 覆盖)+ start_hidden.vbs 加错误处理+日志 | 修端口 regression + Issue #1 收尾 |
+| 2026-07-22 | patch → v2.0.2 + server.py load_favs/save_favs 用 with 块 + 改 except 类型 | 修小问题 |
+| 2026-07-22 | 重大升级 → v2.0.0 + daily_pipeline 端口/日志/环境变量重构 | 用户手动指定 |
+| 2026-07-21 | git init + .gitignore + README(本文件) | 接入 3-agent 流水线试点 |
+| 2026-06-27 | 创建 libraryControl 文件 | 初版 |
 
-## 关联
+## 验收日志
 
-- [picturewebControl.md](picturewebControl.md) · Control 元数据(三方别名)
-- [.Core/IDENTITY.md](.Core/IDENTITY.md) · 身份卡
-- [.Core/SOUL.md](.Core/SOUL.md) · 灵魂定义
-- [.Core/MEMORY.md](.Core/MEMORY.md) · 长期记忆
-- [.Core/HEARTBEAT.md](.Core/HEARTBEAT.md) · 心跳日志
-- 项目夜间迭代-2026-08.xlsx · Verifier 巡检表(pictureweb 行 42-46)
-
-## 维护
-
-- Coder:pictureweb-coder
-- Verifier:pictureweb-verifier
-- Commander:张勇
-- 最近巡检:2026-08-08 23:15
-- 最近迭代:2026-08-09 00:00(批 1 (00:00) · 5/5 闭环)
+- 2026-08-17 · v2.0.7 · patch: 苹果风 UI 收敛(隐藏 facets 白条 / grid 满屏 minmax 220px / 卡片高度 220→200)+ kw-input placeholder 改"搜索"+ .gitignore 加 logs/ / .AutoEvolution/ / _*.py 排除(运行时残留不进 git)
+- 2026-07-24 · v2.0.6 · minor: AI 找参考(`/api/intent_search` 端点 + 前端"AI 找参考"tab · 自然语言设计意图 → top 5 案例 + reasons 解释); 生图变体(复用 `/api/ai_image` 调 matrix MCP); 苹果风 UI 改造(header 单行紧凑 / 浅色 / 磨砂玻璃 / pill→rect); select 文案简化为中文标签(项目/场景/光线/氛围/类型/公司/视角)
+- 2026-07-22 · v2.0.5 · patch: 仓库 visibility public→private, start_hidden.vbs 加 PICTUREWEB_TEST_PORT=9001 env set, git_data_push.py/auto_release.py 默认 REPO 改新仓库(避免老仓库误推), AGENTS.md §1 同步
+- 2026-07-22 · v2.0.4 · patch: git_data_push.py / auto_release.py 加 HKCU\Environment fallback(mavis bash tool 自动读 user-scope token)+ origin/local sha 错位修复(force update + squash)
+- 2026-07-22 · v2.0.3 · patch: server.py 端口 9001→8081(PICTUREWEB_TEST_PORT env 覆盖), start_hidden.vbs 加 On Error + 写日志, README 修"路径待修"过时描述
+- 2026-07-22 · v2.0.2 · patch: server.py load_favs/save_favs 用 with 块, 修 bare except 吞所有异常
+- 2026-07-22 · v2.0.0 · 跨 major 升级 + daily_pipeline 端口自适应(8081/9001)+ PICTUREWEB_TEST_PORT 环境变量 + server 启停改用日志文件
+- 2026-07-21 · v0.1.0 · 3-Agent 流水线首次跑通(PR #9 + #10)
+- 2026-07-21 · Phase 6 自动化骨架完成(feedback / dispatch / tester / release)

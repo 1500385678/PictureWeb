@@ -215,16 +215,8 @@ h1 {
   box-shadow: var(--shadow-sm);
 }
 
-/* ============== Facets ============== */
-.facets {
-  background: #fff;
-  padding: 20px 32px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  gap: 24px;
-  flex-wrap: wrap;
-  font-size: 13px;
-}
+/* ============== Facets (v2.0.7: 隐藏,让图面更满) ============== */
+.facets { display: none; }
 
 .facet-group {
   display: flex;
@@ -262,26 +254,26 @@ h1 {
   color: #fff;
 }
 
-/* ============== Main ============== */
+/* ============== Main (v2.0.7: 满屏,不再 max-width 居中) ============== */
 .main {
-  padding: 40px 32px;
-  max-width: 1600px;
-  margin: 0 auto;
+  padding: 24px 24px 40px;
+  max-width: none;
+  width: 100%;
 }
 
 .result-meta {
   color: var(--text-secondary);
   font-size: 14px;
-  margin-bottom: 24px;
+  margin-bottom: 16px;
   font-weight: 500;
   letter-spacing: -0.01em;
 }
 
-/* ============== Grid & Cards ============== */
+/* ============== Grid & Cards (v2.0.7: 卡更小,多列,更满) ============== */
 .grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 24px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 16px;
 }
 
 .card {
@@ -315,7 +307,7 @@ h1 {
 
 .card img {
   width: 100%;
-  height: 220px;
+  height: 200px;
   object-fit: cover;
   display: block;
   background: #f0f0f0;
@@ -779,7 +771,7 @@ h1 {
   </div>
   <div class="keywords-box" id="kw-box">
     <span style="color:#888;font-size:12px">多关键词：</span>
-    <input id="kw-input" type="text" placeholder="输入后回车添加（多个 AND 关系）" style="background:#1a1a1a;border:1px solid #3a3a3a;color:#eaeaea;padding:4px 10px;border-radius:12px;font-size:12px;width:200px">
+    <input id="kw-input" type="text" placeholder="搜索" style="background:#1a1a1a;border:1px solid #3a3a3a;color:#eaeaea;padding:4px 10px;border-radius:12px;font-size:12px;width:200px">
   </div>
   <div class="tab-bar">
     <div class="tab active" data-mode="normal" onclick="setMode('normal')">普通搜</div>
