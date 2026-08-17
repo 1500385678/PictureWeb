@@ -1,0 +1,344 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>画布 v3.0 · 03_Architect</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/common.css">
+  <link rel="stylesheet" href="/css/panel.css">
+  <link rel="stylesheet" href="/css/board.css">
+  <link rel="stylesheet" href="/css/fullscreen.css">
+</head>
+<body>
+  <div class="layout">
+    <!-- ===== 左侧栏:搜索 + 项目过滤 + 图库 + 调色板 ===== -->
+    <div class="sidebar">
+      <header>
+        <h1>图库 (拖到画布)</h1>
+        <!-- 2026-07-24 加:数据库切换下拉(图片库 / 分析图库 / ...) -->
+        <div class="db-switcher-row">
+          <select id="db-switcher" title="切换激活数据库(图片库)"></select>
+          <span id="db-info" class="db-info"></span>
+        </div>
+        <!-- 2026-08-17 加:画布 DB 切换下拉(媒体/应用/游戏/机器人/空间) -->
+        <div class="db-switcher-row">
+          <select id="canvas-db-switcher" title="切换画布数据库(按工作类型)"></select>
+          <span id="canvas-db-info" class="db-info"></span>
+        </div>
+        <!-- 2026-07-24 加:搜索模式 tab 切换(关键词 / 智能) -->
+        <div class="search-mode-row">
+          <button class="search-mode-btn active" data-mode="keyword" title="FTS 关键词搜索">关键词</button>
+          <button class="search-mode-btn" data-mode="semantic" title="智能语义搜索(LLM 改写 + FTS)">✨ 智能</button>
+          <span id="semantic-hint" class="semantic-hint" hidden>需要先配置大模型 + 通过测试</span>
+        </div>
+        <!-- 2026-07-10 改:搜索框 + 行数 + 项目下拉 同一行 -->
+        <div class="search-row">
+          <input id="q" type="text" placeholder="搜索图…按 Enter">
+          <input id="rows" type="number" min="10" max="500" step="10" value="50" title="每页行数(10-500)">
+          <span class="rows-label">行</span>
+          <select id="project-select" title="选择项目">
+            <option value="">全部 project</option>
+          </select>
+        </div>
+      </header>
+      <div class="thumbs" id="thumbs"></div>
+      <!-- 2026-07-10 加:节点查询(画布节点列表 · 点击居中) -->
+      <div class="node-query-panel">
+        <div class="node-query-header">
+          <span class="label">🔍 节点查询</span>
+          <input id="node-q" type="text" placeholder="筛节点…" />
+        </div>
+        <div class="node-query-list" id="node-query-list"></div>
+        <div class="node-query-info" id="node-query-info">共 0 节点</div>
+      </div>
+      <div class="palette-panel" id="palette-panel">
+        <div class="palette-panel-header">
+          <span class="palette-icon">🎨</span>
+          <span class="label">配色板</span>
+          <button class="palette-refresh" title="重新提取">↻</button>
+        </div>
+        <div class="palette-grid" id="palette-grid">
+          <div class="palette-panel-empty">点 ↻ 提取主色</div>
+        </div>
+        <div class="palette-panel-info" id="palette-info"></div>
+      </div>
+      <!-- v3.3.23: 画布选择栏挪到画布底部,可收起 · 不再在 sidebar -->
+    </div>
+
+    <!-- ===== 主区:画布 ===== -->
+    <div class="canvas-area">
+      <!-- 2026-07-10 加:快捷键面板(浮层 content,trigger 在 .canvas-bottombar 内) -->
+      <div id="shortcuts-panel" class="shortcuts-panel">
+        <div class="shortcuts-content" id="shortcuts-content" hidden>
+          <div class="shortcuts-cols">
+            <div class="sc-col">
+              <div class="sc-title">创作</div>
+              <div class="sc-row"><span class="sc-label">成组</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>G</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">解组</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>G</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">连线</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>L</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">复制节点</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>C</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">复制(+20)</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>D</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">AI 生成</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>↵</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">新建 AI 节点</span><span class="sc-keys"><kbd>Tab</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">拖动时复制</span><span class="sc-keys"><kbd>Alt</kbd>+拖动</span></div>
+            </div>
+            <div class="sc-col">
+              <div class="sc-title">缩放</div>
+              <div class="sc-row"><span class="sc-label">放大</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>+</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">缩小</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>−</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">适应画布</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>0</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">鼠标</span><span class="sc-keys"><kbd>Ctrl</kbd>+滚轮</span></div>
+            </div>
+            <div class="sc-col">
+              <div class="sc-title">移动画布</div>
+              <div class="sc-row"><span class="sc-label">键盘</span><span class="sc-keys"><kbd>Space</kbd>+拖</span></div>
+              <div class="sc-row"><span class="sc-label">鼠标</span><span class="sc-keys">中/右键拖</span></div>
+              <div class="sc-row"><span class="sc-label">整理画布</span><span class="sc-keys"><kbd>Alt</kbd>+<kbd>Shift</kbd>+<kbd>F</kbd></span></div>
+            </div>
+            <div class="sc-col">
+              <div class="sc-title">其他</div>
+              <div class="sc-row"><span class="sc-label">撤销</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>Z</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">重做</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>Shift</kbd>+<kbd>Z</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">删除</span><span class="sc-keys"><kbd>Del</kbd></span></div>
+              <div class="sc-row"><span class="sc-label">粘贴</span><span class="sc-keys"><kbd>Ctrl</kbd>+<kbd>V</kbd></span></div>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- v3.3.21: 工具栏放回画布顶部(横向 · 紧凑 · 短文字 · 小字号) -->
+      <div class="toolbar">
+        <button id="btn-ai" title="AI 生图(单视角)">AI</button>
+        <button id="btn-ai-multi" title="多视角 AI(鸟瞰/透视/总图/立面/剖面/轴测)">多视角</button>
+        <button id="btn-ai-video" title="AI 生视频(图生视频为主)">视频</button>
+        <button id="btn-image2text" title="图生文(图转文字 + 提升画面质感 prompt)">图生文</button>
+        <button id="btn-tts" title="文字转声音(文字节点 → 语音)">TTS</button>
+        <button id="btn-music" title="AI 生音乐(Suno · 4 种风格 · 0.5-2 分钟)">🎵 音乐</button>
+        <button id="btn-chat" title="AI 设计助手(Ctrl+Shift+A)">助手</button>
+        <button id="btn-upload" title="上传本地图片">↑</button>
+        <span class="toolbar-sep"></span>
+        <button id="btn-group" title="成组(Ctrl+G,选中 ≥2 个)">成组</button>
+        <button id="btn-ungroup" title="解组(Ctrl+Shift+G)">解组</button>
+        <button id="btn-history" title="画布版本快照(最多 20 份)">历史</button>
+        <button id="btn-mask" title="蒙版工具(画白色 mask → 复制到剪贴板)">蒙版</button>
+        <span class="toolbar-sep"></span>
+        <button id="btn-bulk-prompt" title="批量改 prompt(选 2+ AI 节点)">批量</button>
+        <button id="btn-connections" title="节点连接管理面板(查看/删除/清空)">连线</button>
+        <button id="btn-prompt-templates" title="Prompt 模板面板(高频 prompt 持久化)">模板</button>
+        <span class="toolbar-sep"></span>
+        <button id="btn-clear" title="清空画布(不可恢复)">清空</button>
+        <button id="btn-export" class="primary" title="导出 JPG">导出</button>
+        <span class="toolbar-sep"></span>
+        <!-- v3.5.9: 技能子页面入口(独立页面) -->
+        <a class="toolbar-link" href="/skills.html" title="技能面板(挂接/查看 AI 技能)">🎯 技能</a>
+        <!-- v3.5.10: 与设计对话 全屏子页面入口 -->
+        <a class="toolbar-link" href="/chat.html" title="与设计对话(全屏 AI 设计助手)">💬 对话</a>
+        <!-- v3.5.12: 画布全屏模式(隐藏侧栏/工具栏/底部等周边 UI) -->
+        <button id="btn-fullscreen" class="fullscreen-mode-badge" title="进入全屏(F 键)">⛶ 全屏</button>
+      </div>
+      <canvas id="canvas"></canvas>
+      <div id="ai-node-layer"></div>
+      <!-- 2026-07-09 加:AI 视频节点浮层 -->
+      <div id="ai-video-layer"></div>
+      <!-- 2026-07-15 加:图生文节点浮层 -->
+      <div id="image2text-node-layer"></div>
+      <!-- 2026-07-15 加:文字转声音节点浮层 -->
+      <div id="tts-node-layer"></div>
+      <!-- 2026-07-24 加:多视角 AI 节点浮层 -->
+      <div id="ai-multi-node-layer"></div>
+      <!-- 2026-07-09 加:v1 风格 SVG 连线层 -->
+      <svg id="connection-layer" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow-end" viewBox="0 0 10 10" refX="9" refY="5"
+                  markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#5b8def" />
+          </marker>
+        </defs>
+      </svg>
+
+      <!-- 2026-07-09 加:画布右键菜单 -->
+      <div id="canvas-context-menu">
+        <!-- 节点上右键才显示(2026-07-10 加) -->
+        <div class="ctx-group ctx-on-node" hidden>
+          <!-- 2026-07-28 加(v3.3.14):从当前单选节点连接到右击的节点(只对单选 → 另一节点 显示) -->
+          <div class="item" data-action="connect-to" hidden>🔗 连接到…</div>
+          <div class="sep"></div>
+          <div class="item" data-action="group-selection">⛓ 成组(Ctrl+G)</div>
+          <div class="item" data-action="ungroup-selection">⛓ 解组(Ctrl+Shift+G)</div>
+          <div class="item" data-action="recolor-group">🎨 改组色(12 色)</div>
+          <div class="item" data-action="copy-selection">📋 复制(Ctrl+C)</div>
+          <div class="item" data-action="delete-selection">🗑 删除(Delete)</div>
+          <div class="sep"></div>
+          <!-- 2026-07-14 加:六向对齐 + 等距分布(选中 ≥2 节点时) -->
+          <div class="item" data-action="align-left">⇤ 左对齐</div>
+          <div class="item" data-action="align-center-x">⇔ 水平居中</div>
+          <div class="item" data-action="align-right">⇥ 右对齐</div>
+          <div class="item" data-action="align-top">⤒ 顶对齐</div>
+          <div class="item" data-action="align-center-y">⇕ 垂直居中</div>
+          <div class="item" data-action="align-bottom">⤓ 底对齐</div>
+          <div class="sep"></div>
+          <div class="item" data-action="distribute-x">⇋ 水平等距(≥3)</div>
+          <div class="item" data-action="distribute-y">⇵ 垂直等距(≥3)</div>
+        </div>
+        <!-- 2026-07-27 加:批量改色 / 批量改 AI 风格 / 批量删除 -->
+        <div class="ctx-group ctx-on-node" data-need-multi="2">
+          <div class="sep"></div>
+          <div class="item ctx-sub" data-action="bulk-color-pick">🎨 批量改色(选节点)</div>
+          <div class="item ctx-sub" data-action="bulk-ai-style">⚙ 批量改 AI 风格(选 AI 节点)</div>
+          <div class="item ctx-sub" data-action="bulk-delete">🗑 批量删除(选节点)</div>
+        </div>
+        <!-- 空白处右键才显示 · 2026-07-10 加:有选中时显示"成组"(不够 2 个 disabled) -->
+        <div class="ctx-group ctx-on-blank">
+          <div class="item" data-action="group-selection" id="ctx-group-on-blank">⛓ 成组选中(≥2 个,Ctrl+G)</div>
+          <div class="sep"></div>
+          <div class="item" data-action="add-ai">+ 新建 AI 生图节点</div>
+          <div class="item" data-action="add-ai-multi">✦ 新建多视角 AI 节点</div>
+          <div class="item" data-action="add-ai-video">🎬 新建 AI 视频节点</div>
+          <div class="item" data-action="add-image2text">📝 新建图生文节点</div>
+          <div class="item" data-action="add-tts">🔊 新建文字转声音节点</div>
+          <div class="item" data-action="add-text">✎ 新建文字便签</div>
+          <div class="item" data-action="add-region">▭ 新建区域框</div>
+          <div class="item" data-action="add-arrow">↗ 新建箭头</div>
+          <div class="sep"></div>
+        </div>
+        <div class="ctx-group ctx-on-blank">
+          <div class="item" data-action="new-canvas">+ 新建画布</div>
+          <div class="item" data-action="rename-canvas">重命名当前画布</div>
+        </div>
+      </div>
+
+      <div class="canvas-bottombar">
+        <button class="cb-btn" id="cb-minimap" title="切换区位图">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M2 4 L6 3 L10 4 L14 3 L14 12 L10 13 L6 12 L2 13 Z"/>
+            <path d="M6 3 L6 12 M10 4 L10 13"/>
+          </svg>
+        </button>
+        <button class="cb-btn active" id="cb-grid" title="切换网格">
+          <svg viewBox="0 0 16 16" fill="currentColor">
+            <rect x="1" y="1" width="3" height="3" rx="0.5"/><rect x="6" y="1" width="3" height="3" rx="0.5"/><rect x="11" y="1" width="3" height="3" rx="0.5"/>
+            <rect x="1" y="6" width="3" height="3" rx="0.5"/><rect x="6" y="6" width="3" height="3" rx="0.5"/><rect x="11" y="6" width="3" height="3" rx="0.5"/>
+            <rect x="1" y="11" width="3" height="3" rx="0.5"/><rect x="6" y="11" width="3" height="3" rx="0.5"/><rect x="11" y="11" width="3" height="3" rx="0.5"/>
+          </svg>
+        </button>
+        <button class="cb-btn" id="cb-reset" title="适配视图">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M2 5 L2 2 L5 2 M11 2 L14 2 L14 5 M14 11 L14 14 L11 14 M5 14 L2 14 L2 11"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+          </svg>
+        </button>
+        <!-- 2026-07-10 加:快捷键触发按钮(嵌进 bottombar,避免和 minimap 按钮组重叠) -->
+        <button class="cb-btn shortcuts-trigger" id="shortcuts-trigger" title="快捷键(点击展开)">⌨</button>
+        <div class="cb-divider"></div>
+        <div class="cb-zoom" id="zoom-info" title="点击重置缩放">100%</div>
+        <!-- v3.5.3: 画布选择栏内容合并到 bottombar 内部(用 .ctb-only 类标记只属于画布栏的元素) -->
+        <div class="cb-divider"></div>
+        <button id="canvastopbar-toggle-label" class="cp-toggle-label ctb-only-ctl" title="点击收起/展开画布选择栏">画布</button>
+        <select id="canvas-select" class="ctb-only"></select>
+        <button id="canvas-new" class="ctb-only" title="新建画布">+ 新建</button>
+        <button id="canvas-rename" class="ctb-only" title="重命名">重命名</button>
+        <button id="canvas-delete" class="ctb-only danger" title="删除">删除</button>
+        <span class="save-state ctb-only" id="save-state">—</span>
+      </div>
+      <!-- v3.5.3: 删除独立的 .canvas-topbar 块(已合并到 .canvas-bottombar) -->
+
+      <!-- 2026-07-27 加:跨画布全局搜索(底部居中 · 浮层 · 不挡顶栏) -->
+      <div class="global-search" id="global-search">
+        <input id="global-search-input" type="text" placeholder="🔍 搜所有画布(prompt/名字/项目)" autocomplete="off" />
+        <div class="global-search-results" id="global-search-results" hidden></div>
+      </div>
+
+      <div class="llm-status disabled" id="llm-status" title="点击配置大模型">
+        <span class="dot"></span>
+        <span class="name">未配置</span>
+      </div>
+    </div>
+
+    <!-- ===== Prompt 弹窗 ===== -->
+    <aside class="prompt-panel" id="prompt-panel">
+      <div class="prompt-header">
+        <h2 id="prompt-title">图片名</h2>
+        <button class="close-btn" id="prompt-close">×</button>
+      </div>
+      <div class="prompt-body">
+        <img class="prompt-preview" id="prompt-preview" src="" alt="">
+        <div class="prompt-section">
+          <div class="prompt-section-title">标签</div>
+          <div class="prompt-tags" id="prompt-tags"></div>
+        </div>
+        <div class="prompt-section">
+          <div class="prompt-section-title">AI 生图提示词(可编辑)</div>
+          <textarea class="prompt-textarea" id="prompt-text" spellcheck="false"></textarea>
+          <div class="prompt-buttons">
+            <button class="prompt-btn" id="prompt-copy">📋 复制提示词</button>
+            <button class="prompt-btn secondary" id="prompt-mj">🚀 Midjourney</button>
+          </div>
+          <span class="copy-feedback" id="copy-feedback">✓ 已复制</span>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ===== LLM 配置面板 ===== -->
+    <aside id="llm-panel">
+      <header>
+        <span>⚙ 大模型配置</span>
+        <button class="close-btn" id="llm-close">×</button>
+      </header>
+      <div class="body">
+        <div class="row">
+          <label><input type="checkbox" id="llm-enabled" style="width:auto;margin-right:6px;vertical-align:middle">启用大模型</label>
+          <div class="hint">关闭时不调用,前端状态灯显示灰色</div>
+        </div>
+        <div class="row">
+          <label>Provider</label>
+          <select id="llm-provider">
+            <option value="openai">OpenAI 兼容协议(支持自定义 base_url)</option>
+            <option value="mavis">mavis skill(本机命令行)</option>
+          </select>
+        </div>
+        <!-- 2026-07-09 加:快速预设 · 选了自动填 base_url + model -->
+        <div class="row">
+          <label>快速预设</label>
+          <select id="llm-preset">
+            <option value="custom">自定义(手动填 Base URL / Model)</option>
+            <option value="minimax">⭐ MiniMax(MiniMax-Text-01 · 直白)</option>
+            <option value="minimax-m3">⭐ MiniMax M3(推理模型 · 慢但强)</option>
+            <option value="deepseek">⭐ DeepSeek(deepseek-chat)</option>
+            <option value="zhipu">智谱 GLM(glm-4-flash · 免费)</option>
+            <option value="kimi">月之暗面 Kimi(moonshot-v1-8k)</option>
+            <option value="qwen">阿里通义千问(qwen-turbo)</option>
+          </select>
+          <div class="hint">选预设会自动填 Base URL 和模型名,你只需要填 API Key</div>
+        </div>
+        <div class="row">
+          <label>Base URL</label>
+          <input id="llm-baseurl" type="text" placeholder="https://api.openai.com/v1">
+          <div class="hint">OpenAI/Azure/Moonshot/Anthropic 兼容网关都可以</div>
+        </div>
+        <div class="row">
+          <label>API Key</label>
+          <input id="llm-apikey" type="password" placeholder="留空表示不修改">
+          <div class="hint" id="llm-apikey-hint">当前: (未设置)</div>
+        </div>
+        <div class="row">
+          <label>模型名</label>
+          <input id="llm-model" type="text" placeholder="gpt-4o-mini">
+        </div>
+        <div class="row">
+          <label>System Prompt</label>
+          <textarea id="llm-system" placeholder="你是建筑外立面方案设计助手..."></textarea>
+        </div>
+      </div>
+      <div class="test-result" id="llm-test-result" style="display:none"></div>
+      <div class="actions">
+        <button id="llm-test">测试连通</button>
+        <button class="primary" id="llm-save">保存</button>
+      </div>
+    </aside>
+  </div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
+
