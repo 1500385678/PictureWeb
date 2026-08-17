@@ -1,0 +1,238 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>画布 v3.0 · Board</title>
+  <link rel="stylesheet" href="/css/tokens.css">
+  <link rel="stylesheet" href="/css/common.css">
+  <link rel="stylesheet" href="/css/panel.css">
+  <link rel="stylesheet" href="/css/board.css">
+</head>
+<body>
+  <div class="layout">
+    <div class="sidebar">
+      <header>
+        <h1>图库 (拖到画布)</h1>
+        <!-- 2026-07-24 加:数据库切换下拉(图片库 / 分析图库 / ...) -->
+        <div class="db-switcher-row">
+          <select id="db-switcher" title="切换激活数据库(图片库)"></select>
+          <span id="db-info" class="db-info"></span>
+        </div>
+        <!-- 2026-08-17 加:画布 DB 切换下拉(媒体/应用/游戏/机器人/空间) -->
+        <div class="db-switcher-row">
+          <select id="canvas-db-switcher" title="切换画布数据库(按工作类型)"></select>
+          <span id="canvas-db-info" class="db-info"></span>
+        </div>
+        <div class="search-row">
+          <input id="q" type="text" placeholder="搜索图…按 Enter">
+          <input id="rows" type="number" min="10" max="500" step="10" value="50" title="每页行数(10-500)">
+          <span class="rows-label">行</span>
+        </div>
+      </header>
+      <!-- 2026-07-09 改:项目下拉(替代折叠 details) -->
+      <div class="project-select-wrap">
+        <select id="project-select" title="选择项目">
+          <option value="">全部 project</option>
+        </select>
+      </div>
+      <div class="thumbs" id="thumbs"></div>
+    </div>
+
+    <div class="canvas-area">
+      <div class="canvas-topbar">
+        <span class="label">画布</span>
+        <select id="canvas-select"></select>
+        <button id="canvas-new" title="新建画布">+ 新建</button>
+        <button id="canvas-rename" title="重命名">重命名</button>
+        <button id="canvas-delete" class="danger" title="删除">删除</button>
+        <button id="canvas-paste-to" title="把 Ctrl+C 复制的节点粘贴到其他画布" style="display:none">📋 粘贴到</button>
+        <span class="save-state" id="save-state">—</span>
+        <span class="topbar-tip">滚轮缩放 · 空格拖动 · Delete 删除</span>
+      </div>
+      <div class="toolbar">
+        <button id="btn-ai">+ AI 生图</button>
+        <!-- 2026-07-24 加:多视角 AI(6 视角一次出) -->
+        <button id="btn-ai-multi" title="多视角 AI 一次生成(鸟瞰/透视/总图/立面/剖面/轴测)">✦ 多视角 AI</button>
+        <!-- 2026-07-09 加:AI 生视频按钮 -->
+        <button id="btn-ai-video" title="AI 生视频(图生视频为主)">🎬 AI 视频</button>
+        <!-- 2026-07-15 加:图生文 + 文字转声音(同步 main.js 工具栏) -->
+        <button id="btn-image2text" title="图生文(图转文字 + 提升画面质感的 prompt)">📝 图生文</button>
+        <button id="btn-tts" title="文字转声音(连入文字节点 → 语音合成)">🔊 文字转声音</button>
+        <button id="btn-music" title="AI 生音乐(Suno · 4 种风格 · 0.5-2 分钟)">🎵 AI 音乐</button>
+        <button id="btn-text" title="文字便签">✎ 文字</button>
+        <button id="btn-region" title="区域框">▭ 区域</button>
+        <button id="btn-arrow" title="箭头">↗ 箭头</button>
+        <button id="btn-upload" title="上传本地图片">↑ 上传</button>
+        <button id="btn-export" class="primary">导出 JPG</button>
+      </div>
+      <canvas id="canvas"></canvas>
+      <div id="ai-node-layer"></div>
+      <!-- 2026-07-09 加:AI 视频节点浮层(同 ai-node-layer · 不同 id) -->
+      <div id="ai-video-layer"></div>
+      <!-- 2026-07-15 加:图生文 / 文字转声音 浮层(同步 main.js · board.html 之前漏了) -->
+      <div id="image2text-node-layer"></div>
+      <div id="tts-node-layer"></div>
+      <!-- 2026-07-24 加:多视角 AI 节点浮层 -->
+      <div id="ai-multi-node-layer"></div>
+      <!-- 2026-07-09 加:v1 风格 SVG 连线层(覆盖在画布 + AI 浮层之上) -->
+      <svg id="connection-layer" xmlns="http://www.w3.org/2000/svg">
+        <defs>
+          <marker id="arrow-end" viewBox="0 0 10 10" refX="9" refY="5"
+                  markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+            <path d="M0,0 L10,5 L0,10 z" fill="#5b8def" />
+          </marker>
+        </defs>
+      </svg>
+
+      <!-- 2026-07-09 加:画布右键菜单(JS 注入位置 / 显隐) -->
+      <div id="canvas-context-menu">
+        <div class="item" data-action="add-ai">+ 新建 AI 生图节点</div>
+        <div class="item" data-action="add-ai-multi">✦ 新建多视角 AI 节点</div>
+        <div class="item" data-action="add-ai-video">🎬 新建 AI 视频节点</div>
+        <!-- 2026-07-15 加:图生文 / 文字转声音(同步 main.js) -->
+        <div class="item" data-action="add-image2text">📝 新建图生文节点</div>
+        <div class="item" data-action="add-tts">🔊 新建文字转声音节点</div>
+        <div class="item" data-action="add-music">🎵 新建 AI 音乐节点</div>
+        <div class="item" data-action="add-text">✎ 新建文字便签</div>
+        <div class="item" data-action="add-region">▭ 新建区域框</div>
+        <div class="item" data-action="add-arrow">↗ 新建箭头</div>
+        <div class="sep"></div>
+        <div class="item" data-action="new-canvas">+ 新建画布</div>
+        <div class="item" data-action="rename-canvas">重命名当前画布</div>
+      </div>
+
+      <div class="canvas-bottombar">
+        <button class="cb-btn" id="cb-minimap" title="切换区位图">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <path d="M2 4 L6 3 L10 4 L14 3 L14 12 L10 13 L6 12 L2 13 Z"/>
+            <path d="M6 3 L6 12 M10 4 L10 13"/>
+          </svg>
+        </button>
+        <button class="cb-btn active" id="cb-grid" title="切换网格">
+          <svg viewBox="0 0 16 16" fill="currentColor">
+            <rect x="1" y="1" width="3" height="3" rx="0.5"/><rect x="6" y="1" width="3" height="3" rx="0.5"/><rect x="11" y="1" width="3" height="3" rx="0.5"/>
+            <rect x="1" y="6" width="3" height="3" rx="0.5"/><rect x="6" y="6" width="3" height="3" rx="0.5"/><rect x="11" y="6" width="3" height="3" rx="0.5"/>
+            <rect x="1" y="11" width="3" height="3" rx="0.5"/><rect x="6" y="11" width="3" height="3" rx="0.5"/><rect x="11" y="11" width="3" height="3" rx="0.5"/>
+          </svg>
+        </button>
+        <button class="cb-btn" id="cb-reset" title="适配视图">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5">
+            <path d="M2 5 L2 2 L5 2 M11 2 L14 2 L14 5 M14 11 L14 14 L11 14 M5 14 L2 14 L2 11"/><circle cx="8" cy="8" r="1.5" fill="currentColor"/>
+          </svg>
+        </button>
+        <div class="cb-divider"></div>
+        <!-- v3.5.42 加:Issues 反馈按钮(走 /api/feedback_arch) -->
+        <button class="cb-btn" id="cb-issues" title="Issues 反馈(双平台)">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.4">
+            <circle cx="8" cy="8" r="6.5"/>
+            <path d="M8 11 L8 7 M8 5 L8 5.01" stroke-linecap="round"/>
+          </svg>
+        </button>
+        <div class="cb-zoom" id="zoom-info" title="点击重置缩放">100%</div>
+      </div>
+
+      <div class="llm-status disabled" id="llm-status" title="点击配置大模型">
+        <span class="dot"></span>
+        <span class="name">未配置</span>
+      </div>
+    </div>
+
+    <aside class="prompt-panel" id="prompt-panel">
+      <div class="prompt-header">
+        <h2 id="prompt-title">图片名</h2>
+        <button class="close-btn" id="prompt-close">×</button>
+      </div>
+      <div class="prompt-body">
+        <img class="prompt-preview" id="prompt-preview" src="" alt="">
+        <div class="prompt-section">
+          <div class="prompt-section-title">标签</div>
+          <div class="prompt-tags" id="prompt-tags"></div>
+        </div>
+        <div class="prompt-section">
+          <div class="prompt-section-title">AI 生图提示词(可编辑)</div>
+          <textarea class="prompt-textarea" id="prompt-text" spellcheck="false"></textarea>
+          <div class="prompt-buttons">
+            <button class="prompt-btn" id="prompt-copy">📋 复制提示词</button>
+            <button class="prompt-btn secondary" id="prompt-mj">🚀 Midjourney</button>
+          </div>
+          <span class="copy-feedback" id="copy-feedback">✓ 已复制</span>
+        </div>
+      </div>
+    </aside>
+
+    <aside id="llm-panel">
+      <header>
+        <span>⚙ 大模型配置</span>
+        <button class="close-btn" id="llm-close">×</button>
+      </header>
+      <div class="body">
+        <div class="row">
+          <label><input type="checkbox" id="llm-enabled" style="width:auto;margin-right:6px;vertical-align:middle">启用大模型</label>
+          <div class="hint">关闭时不调用,前端状态灯显示灰色</div>
+        </div>
+        <div class="row">
+          <label>Provider</label>
+          <select id="llm-provider">
+            <option value="openai">OpenAI 兼容协议(支持自定义 base_url)</option>
+            <option value="mavis">mavis skill(本机命令行)</option>
+          </select>
+        </div>
+        <!-- 2026-07-09 加:快速预设 · 选了自动填 base_url + model -->
+        <div class="row">
+          <label>快速预设</label>
+          <select id="llm-preset">
+            <option value="custom">自定义(手动填 Base URL / Model)</option>
+            <option value="minimax">⭐ MiniMax(MiniMax-Text-01 · 直白)</option>
+            <option value="minimax-m3">⭐ MiniMax M3(推理模型 · 慢但强)</option>
+            <option value="deepseek">⭐ DeepSeek(deepseek-chat)</option>
+            <option value="zhipu">智谱 GLM(glm-4-flash · 免费)</option>
+            <option value="kimi">月之暗面 Kimi(moonshot-v1-8k)</option>
+            <option value="qwen">阿里通义千问(qwen-turbo)</option>
+          </select>
+          <div class="hint">选预设会自动填 Base URL 和模型名,你只需要填 API Key</div>
+        </div>
+        <div class="row">
+          <label>Base URL</label>
+          <input id="llm-baseurl" type="text" placeholder="https://api.openai.com/v1">
+        </div>
+        <div class="row">
+          <label>API Key</label>
+          <input id="llm-apikey" type="password" placeholder="留空表示不修改">
+          <div class="hint" id="llm-apikey-hint">当前: (未设置)</div>
+        </div>
+        <div class="row">
+          <label>模型名</label>
+          <input id="llm-model" type="text" placeholder="gpt-4o-mini">
+        </div>
+        <div class="row">
+          <label>System Prompt</label>
+          <textarea id="llm-system"></textarea>
+        </div>
+      </div>
+      <div class="test-result" id="llm-test-result" style="display:none"></div>
+      <div class="actions">
+        <button id="llm-test">测试连通</button>
+        <button class="primary" id="llm-save">保存</button>
+      </div>
+    </aside>
+  </div>
+
+  <!-- 2026-08-07 加:右下角浮动按钮 · 问题反馈(直接推 GitHub/Gitee Issues)
+       2026-08-07 修:放 body 末尾 + 加 inline style 兜底(避免被 canvas-area overflow 裁剪) -->
+  <button id="fb-issues-fab" class="fab-issues" title="问题反馈(直接推到 GitHub/Gitee Issues)"
+          style="position:fixed;bottom:96px;right:24px;width:48px;height:48px;border-radius:50%;
+                 background:#ff9e4a;color:#fff;border:none;box-shadow:0 4px 12px rgba(0,0,0,0.4);
+                 z-index:9999;cursor:pointer;display:flex;align-items:center;justify-content:center;
+                 transition:transform .15s,box-shadow .15s;">
+    <svg viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.8" style="width:24px;height:24px;color:#fff;">
+      <circle cx="10" cy="10" r="8"/>
+      <path d="M10 13 L10 8 M10 6 L10 6.01" stroke-linecap="round"/>
+    </svg>
+  </button>
+
+  <script type="module" src="/js/board-main.js"></script>
+</body>
+</html>
+
