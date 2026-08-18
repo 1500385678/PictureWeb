@@ -183,6 +183,13 @@ h1 {
   box-shadow: 0 0 0 2px var(--accent-soft);
 }
 
+/* v2.0.8:数据库切换器(2026-08-18) */
+#db-select:focus {
+  border-color: var(--accent) !important;
+  outline: none;
+}
+#db-select option { background: #1a1a1a; color: #eaeaea; }
+
 /* ============== Tabs ============== */
 .tab-bar {
   display: inline-flex;
@@ -771,7 +778,10 @@ h1 {
   </div>
   <div class="keywords-box" id="kw-box">
     <span style="color:#888;font-size:12px">多关键词：</span>
-    <input id="kw-input" type="text" placeholder="搜索" style="background:#1a1a1a;border:1px solid #3a3a3a;color:#eaeaea;padding:4px 10px;border-radius:12px;font-size:12px;width:200px">
+    <input id="kw-input" type="text" placeholder="搜索" style="background:#1a1a1a;border:1px solid #3a3a3a;color:#eaeaea;padding:4px 10px;border-radius:12px;font-size:12px;width:160px">
+    <!-- v2.0.8:数据库切换(2026-08-18) -->
+    <select id="db-select" onchange="switchDb(this.value)" style="background:#1a1a1a;border:1px solid #3a3a3a;color:#eaeaea;padding:4px 10px;border-radius:12px;font-size:12px;margin-left:6px;cursor:pointer" title="切换数据库"></select>
+    <span id="db-count" style="color:#86868b;font-size:11px;margin-left:4px"></span>
   </div>
   <div class="tab-bar">
     <div class="tab active" data-mode="normal" onclick="setMode('normal')">普通搜</div>
@@ -834,7 +844,48 @@ async function init() {
   const fd = await fr.json();
   favs = fd.favorites;
   updateFavBtns();
+  await loadDbList();  // v2.0.8:数据库切换器
   search();
+}
+
+// v2.0.8:数据库切换(2026-08-18)
+async function loadDbList() {
+  try {
+    const r = await fetch('/api/databases');
+    const data = await r.json();
+    const sel = document.getElementById('db-select');
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (const db of data.databases) {
+      const opt = document.createElement('option');
+      opt.value = db.name;
+      opt.textContent = `${db.name} (${db.count})`;
+      if (db.name === data.current) opt.selected = true;
+      sel.appendChild(opt);
+    }
+    const cnt = document.getElementById('db-count');
+    if (cnt) cnt.textContent = `共 ${data.databases.length} 个库 · 当前 ${data.current}`;
+  } catch (e) {
+    console.warn('loadDbList failed:', e);
+  }
+}
+
+async function switchDb(name) {
+  if (!name) return;
+  const r = await fetch('/api/database/switch', {
+    method: 'POST',
+    headers: {'Content-Type': 'application/json'},
+    body: JSON.stringify({name}),
+  });
+  if (r.ok) {
+    // 切换成功:刷新页面,新 cookie 生效
+    location.reload();
+  } else {
+    const err = await r.json();
+    alert('切换失败: ' + (err.error || 'unknown'));
+    // 恢复原选择
+    loadDbList();
+  }
 }
 
 function fillSelect(id, items) {

@@ -1,0 +1,11 @@
+feat: v2.0.8 数据库切换器(2026-08-18)
+
+- 扫描 PICTUREWEB_HOME 下所有有 images 表的 .db 文件,自动构建 DB_LIST
+- 启动时打印:AnalysisDb (11 张) + PictureDb (390 张) 共 2 个库
+- 每个请求从 Cookie 读 db=xxx,sqlite3.connect(self._db) 自动切库
+- 新增 GET /api/databases(公开)+ POST /api/database/switch(本机)
+- index.html header 红框位置加数据库下拉,onchange 切库 + 刷新
+- 同名去重:3 个 PictureDb.db 合并为 1(选最浅路径 + 最大 count)
+- 库名前缀 _ 去掉(_AnalysisDb -> AnalysisDb),cookie 名字稳定
+
+测试:smoke 3/3 OK + 切库后搜到 id=11 AnalysisDb 的图
