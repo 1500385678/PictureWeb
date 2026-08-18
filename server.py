@@ -124,17 +124,11 @@ def save_favs(favs):
     with open(FAV_FILE, 'w', encoding='utf-8') as f:
         json.dump(favs, f, ensure_ascii=False, indent=2)
 
-def to_img_url(abs_path):
-    """将绝对路径转为 /img/ 相对 URL（兼容旧 Mac 路径）"""
-    # 旧 Mac 路径 -> 新路径映射
-    if abs_path.startswith(OLD_IMG_ROOT):
-        abs_path = abs_path.replace(OLD_IMG_ROOT, IMG_ROOT)
-    # 取相对于 IMG_ROOT 的路径
-    try:
-        rel = os.path.relpath(abs_path, IMG_ROOT).replace(os.sep, '/')
-    except ValueError:
-        rel = abs_path
-    return '/img/' + rel
+def to_img_url(item_id, abs_path=None):
+    """v2.0.8:返回 /api/img?id=<id> URL — 直接从当前 DB 读 abs_path,跨路径都能用
+    旧的 /img/<rel> 静态端点保留(供直接 URL 访问),但 API 响应统一用 /api/img
+    """
+    return f'/api/img?id={item_id}'
 
 def cosine_sim(a, b):
     if not a or not b: return 0
@@ -217,7 +211,7 @@ class Handler(SimpleHTTPRequestHandler):
                 items = self._search(q, keywords, project, scene, light, mood, arch, company, view_type, favs_only, limit)
                 # 转换 path -> url
                 for it in items:
-                    it['url'] = to_img_url(it['path'])
+                    it['url'] = to_img_url(it['id'])
                 self._json({'count': len(items), 'items': items})
             except Exception as e:
                 self._json({'error': str(e), 'count': 0, 'items': []})
@@ -232,6 +226,9 @@ class Handler(SimpleHTTPRequestHandler):
                 'default': DEFAULT_DB_NAME,
                 'databases': [{'name': d['name'], 'rel': d['rel'], 'count': d['count']} for d in DB_LIST],
             })
+        elif parsed.path == '/api/img':
+            # v2.0.8:从当前 DB 读 abs_path 服务图片(任何路径都能用)
+            self._serve_img(parsed)
         else:
             # 其它走父类（HTML/CSS/JS 静态文件）
             super().do_GET()
@@ -297,6 +294,51 @@ class Handler(SimpleHTTPRequestHandler):
         """检查请求是否来自 ADMIN_IPS(自动从 config 同步,避免硬编码不一致)"""
         client_ip = self.client_address[0]
         return client_ip in ADMIN_IPS
+
+    def _serve_img(self, parsed):
+        """v2.0.8:从当前 DB 读 abs_path,直接流式返回图片
+        ?id=<image_id> 公开端点
+        优势:不依赖 IMG_ROOT,任何 DB 的图都能服务
+        """
+        qs = urllib.parse.parse_qs(parsed.query)
+        ids = qs.get('id', [])
+        if not ids:
+            self.send_error(400, 'missing id'); return
+        try:
+            img_id = int(ids[0])
+        except (ValueError, TypeError):
+            self.send_error(400, 'invalid id'); return
+        try:
+            conn = sqlite3.connect(self._db)
+            row = conn.execute('SELECT abs_path FROM images WHERE id = ?', (img_id,)).fetchone()
+            conn.close()
+        except Exception as e:
+            self.send_error(500, f'db error: {e}'); return
+        if not row:
+            self.send_error(404, f'image {img_id} not found'); return
+        abs_path = row[0]
+        # 旧 Mac 路径 → 新路径映射(2026-08-18 v2.0.8:搬迁后的兼容)
+        if abs_path.startswith(OLD_IMG_ROOT):
+            abs_path = abs_path.replace(OLD_IMG_ROOT, IMG_ROOT)
+        if not os.path.isfile(abs_path):
+            self.send_error(404, f'file not found: {abs_path}'); return
+        ext = abs_path.rsplit('.', 1)[-1].lower() if '.' in abs_path else ''
+        mime = {
+            'jpg': 'image/jpeg', 'jpeg': 'image/jpeg',
+            'png': 'image/png', 'gif': 'image/gif',
+            'webp': 'image/webp', 'bmp': 'image/bmp',
+        }.get(ext, 'application/octet-stream')
+        try:
+            sz = os.path.getsize(abs_path)
+            self.send_response(200)
+            self.send_header('Content-Type', mime)
+            self.send_header('Content-Length', str(sz))
+            self.send_header('Cache-Control', 'public, max-age=3600')
+            self.end_headers()
+            with open(abs_path, 'rb') as f:
+                self.wfile.write(f.read())
+        except Exception as e:
+            self.send_error(500, str(e))
 
     def _json(self, data, status=200):
         body = json.dumps(data, ensure_ascii=False).encode('utf-8')
@@ -377,7 +419,7 @@ class Handler(SimpleHTTPRequestHandler):
         for r in rows:
             out.append({
                 'id': r['id'], 'project': r['project'], 'filename': r['filename'],
-                'path': r['abs_path'], 'url': to_img_url(r['abs_path']),
+                'path': r['abs_path'], 'url': to_img_url(r['id']),
                 'scene': r['scene'] or '', 'light': r['light'] or '',
                 'space': r['space'] or '', 'material': r['material'] or '',
                 'mood': r['mood'] or '', 'caption': r['caption'] or '',
@@ -414,7 +456,7 @@ class Handler(SimpleHTTPRequestHandler):
             for s, r in results:
                 out.append({
                     'id': r['img_id'], 'project': r['project'], 'filename': r['filename'],
-                    'path': r['abs_path'], 'url': to_img_url(r['abs_path']),
+                    'path': r['abs_path'], 'url': to_img_url(r['img_id']),
                     'scene': r['scene'] or '', 'light': '',
                     'space': '', 'material': '', 'mood': r['mood'] or '',
                     'caption': '', 'similarity': round(s*100, 1),
@@ -564,7 +606,7 @@ class Handler(SimpleHTTPRequestHandler):
                 'rank': idx,
                 'project': r['project'] or '',
                 'filename': r['filename'] or '',
-                'url': to_img_url(r['abs_path']),
+                'url': to_img_url(r['id']),
                 'path': r['abs_path'],
                 'caption': r['caption'] or '',
                 'scene': r['scene'] or '',
@@ -610,7 +652,7 @@ class Handler(SimpleHTTPRequestHandler):
         for d, r in sims[:20]:
             out.append({
                 'id': r['id'], 'project': r['project'], 'filename': r['filename'],
-                'path': r['abs_path'], 'url': to_img_url(r['abs_path']),
+                'path': r['abs_path'], 'url': to_img_url(r['id']),
                 'scene': r['scene'] or '', 'light': r['light'] or '',
                 'space': r['space'] or '', 'material': r['material'] or '',
                 'mood': r['mood'] or '', 'caption': r['caption'] or '',

@@ -1,0 +1,18 @@
+fix: AnalysisDb 图片看不到(IMG_ROOT 硬编码 Mobile/)
+
+问题:to_img_url() 用 os.path.relpath(abs_path, IMG_ROOT) 计算 URL,
+但 AnalysisDb 的 abs_path 在 Attack/03-Analysis/Mobile/ 下,不在 Mobile/ 根下,
+导致 URL 出现 /img/../Attack/.../ 丑陋路径,浏览器拿不到图。
+
+修:
+1. 加 /api/img?id=<id> 端点(公开),从当前 DB 读 abs_path,流式返回
+2. to_img_url(id) 统一返回 /api/img?id=<id> URL(跨 DB 通用)
+3. _serve_img 保留 OLD_IMG_ROOT → IMG_ROOT 映射(兼容 v2.0.7 前的 Mac 路径)
+4. /img/<rel> 静态端点保留(供直接 URL 访问)
+
+验证:
+- id=365 (PictureDb 旧 Mac 路径) → 200 image/jpeg 321KB
+- id=9 (PictureDb Windows 路径) → 200 image/jpeg 380KB
+- id=1, 11 (AnalysisDb Attack/ 路径) → 200 image/jpeg 405KB
+- id=99999 → 404; 缺/无效 id → 400
+- smoke 3/3 通过
