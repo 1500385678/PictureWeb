@@ -924,7 +924,9 @@ document.getElementById('kw-input').addEventListener('keydown', e => {
 function updateFavBtns() {
   document.querySelectorAll('.fav-btn').forEach(btn => {
     const id = parseInt(btn.dataset.id);
-    btn.classList.toggle('active', favs.includes(id));
+    const isFav = favs.includes(id);
+    btn.classList.toggle('active', isFav);
+    btn.textContent = isFav ? '★' : '☆';
   });
 }
 

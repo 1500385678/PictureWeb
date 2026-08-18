@@ -1,0 +1,9 @@
+fix: 收藏按钮点击后星标没切换(只改色不改字符)
+
+问题:updateFavBtns() 只 toggle 'active' class(CSS 让 color 变红),但 ☆ → ★ 字符没换,用户看不出变化以为坏了。
+
+修:updateFavBtns() 同步更新 textContent:
+  btn.classList.toggle('active', isFav);
+  btn.textContent = isFav ? '★' : '☆';
+
+验证:CDP 实测点击前后 ☆ → ★,active class 同时切换。
