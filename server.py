@@ -7,6 +7,10 @@ import urllib.parse
 # 默认值跟原 hardcoded 一致,向后兼容(不设环境变量时行为不变)
 # 换电脑或换盘符只需: set PICTUREWEB_HOME=E:/your/path
 PICTUREWEB_HOME = os.environ.get('PICTUREWEB_HOME', 'D:/Mac/Mac/workteam/05_space/03_architect')
+# v2.0.9:统一 DB 根(D:/Database/Database,2026-08-27 项目统一抽库)
+# PictureWeb 的 DB 在 05_Space 子目录;其他项目各自分类下
+# 可通过环境变量 PICTUREWEB_DB_ROOT 覆盖
+PICTUREWEB_DB_ROOT = os.environ.get('PICTUREWEB_DB_ROOT', r'D:\Database\Database')
 # DB 在 PictureWeb 同级的 PictureDb/ 下(2026-06-28 修正:有数据的库在 _ArchitectLib/PictureDb/)
 DB = os.path.join(PICTUREWEB_HOME, '_ArchitectLib', 'PictureDb', 'PictureDb.db')
 FAV_FILE = os.path.join(os.path.dirname(__file__), 'favorites.json')
@@ -19,15 +23,18 @@ OLD_IMG_ROOT = '/Users/aaron/Mac/WorkTeam/05_Space/03_Architect/Mobile'
 def _scan_dbs():
     out = []
     seen = set()
-    root = PICTUREWEB_HOME
+    root = PICTUREWEB_DB_ROOT
     for dirpath, dirnames, filenames in os.walk(root):
         rel = os.path.relpath(dirpath, root)
         depth = 0 if rel == '.' else rel.count(os.sep) + 1
-        if depth > 5:
+        if depth > 8:
             dirnames[:] = []
             continue
         for fn in filenames:
             if not fn.lower().endswith('.db'):
+                continue
+            # 跳 Thumbs.db (Windows 缩略图缓存,不是 sqlite,只是减少噪音)
+            if fn.lower() == 'thumbs.db':
                 continue
             full = os.path.join(dirpath, fn)
             norm = os.path.normcase(os.path.abspath(full))
@@ -732,6 +739,8 @@ if __name__ == '__main__':
     print(f'Library 启动: http://127.0.0.1:{port}/', flush=True)
     print(f'           局域网: http://192.168.181.136:{port}/  (需同网段)', flush=True)
     print(f'DB: {DB}', flush=True)
+    print(f'DB_ROOT: {PICTUREWEB_DB_ROOT} (扫库用)', flush=True)
+    print(f'IMG_ROOT: {IMG_ROOT} (图根,不动)', flush=True)
     print(f'可用数据库({len(DB_LIST)}个):', flush=True)
     for d in DB_LIST:
         marker = ' *' if d['name'] == DEFAULT_DB_NAME else '  '

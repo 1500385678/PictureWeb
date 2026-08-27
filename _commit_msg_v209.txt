@@ -1,0 +1,15 @@
+feat: v2.0.9 切到 D:\Database\Database 统一 DB 根
+
+- 加 PICTUREWEB_DB_ROOT env var(默认 D:\Database\Database)
+- _scan_dbs 走 PICTUREWEB_DB_ROOT 而非 PICTUREWEB_HOME
+- depth 5 → 8(新根有 /行万里路/00_亚洲/.../ 更深路径)
+- 加 thumbs.db 快速过滤(Windows 缩略图缓存,不是 sqlite,减少噪音)
+- 启动时打印 DB_ROOT + IMG_ROOT(分清楚扫库 vs 图根)
+
+当前发现 4 个库:
+- 01_MasterDb   (390 张)  05_Space/01_ImageDB/01_MasterDb/PictureDb.db
+- 08_DiagramDb  (390 张)  05_Space/01_ImageDB/08_DiagramDb/PictureDb.db
+- AnalysisDb    (11 张)   05_Space/AnalysisDb/AnalysisDb.db
+- * PictureDb   (390 张)  05_Space/PictureDb/PictureDb.db (默认)
+
+验证:smoke 3/3 + AnalysisDb id=1 200 image/jpeg + PictureDb id=9/365 200

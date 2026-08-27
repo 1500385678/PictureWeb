@@ -16,7 +16,8 @@
 | 工作目录 | `D:\Mac\Mac\Mac\workteam\05_space\03_architect\Mobile\_ArchitectMobileLib\PictureWeb\` |
 | 远端仓库 | `https://github.com/1500385678/PictureWeb` (private, 2026-07-22 v2.0.5 起) |
 | 远端主分支 | `main` |
-| 当前版本 | `v2.0.8` (`__version__.py`) |
+| 当前版本 | `v2.0.9` (`__version__.py`) |
+| DB 根 (v2.0.9) | `D:\Database\Database` (统一抽库,2026-08-27 改;env `PICTUREWEB_DB_ROOT` 可覆盖) |
 | 启动命令 | `python -X utf8 server.py` (Windows) 或双击 `start.bat` |
 | 默认 URL | http://127.0.0.1:8081/ |
 | 共享数据 | `_ArchitectLib/PictureDb/PictureDb.db` (兄弟模块) |
