@@ -445,9 +445,16 @@ h1 {
 
 .modal-info {
   color: rgba(255,255,255,0.9);
-  margin-top: 16px;
-  max-width: 700px;
+  margin-top: 12px;
+  max-width: 720px;
   text-align: left;
+  font-size: 13px;
+}
+.modal-info > div { margin-bottom: 2px; }
+
+.prompt-cat-btn:hover {
+  background: rgba(0,113,227,0.2) !important;
+  border-color: rgba(0,113,227,0.5) !important;
 }
   max-width: 90%;
   font-size: 14px;
@@ -1140,8 +1147,9 @@ function openModal(item) {
     <div>空间: ${item.space||'-'} | 材料: ${item.material||'-'}</div>
     <div style="color:#888;margin-top:6px">路径: ${item.path}</div>
     ${favHtml}
-    <div id="modal-prompts" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.15)">
-      <div style="color:#888;font-size:12px">加载 AI 提示词中...</div>
+    <div id="modal-prompt-btns" style="margin-top:12px;display:flex;gap:6px;flex-wrap:wrap;align-items:center">
+      <span style="color:#fbbf24;font-size:12px;font-weight:600;margin-right:4px">🎨 AI 提示词</span>
+      <span id="prompt-btns-loading" style="color:#888;font-size:12px">加载中...</span>
     </div>
   `;
   document.getElementById('modal').classList.add('open');
@@ -1149,62 +1157,145 @@ function openModal(item) {
   loadPrompts(item.id);
 }
 
+let _currentPrompts = null;  // 当前 modal 的 prompts,供按钮 popover 用
 async function loadPrompts(imageId) {
-  const container = document.getElementById('modal-prompts');
+  const container = document.getElementById('modal-prompt-btns');
   if (!container) return;
   try {
     const r = await fetch('/api/prompts?id=' + imageId);
     const d = await r.json();
     const prompts = d.prompts || {};
+    _currentPrompts = prompts;
     const cats = d.categories || Object.keys(prompts);
     if (cats.length === 0 || Object.keys(prompts).length === 0) {
-      container.innerHTML = '<div style="color:#888;font-size:12px;margin-top:4px">无 AI 提示词(此图未打 prompt)</div>';
+      container.innerHTML = '<span style="color:#fbbf24;font-size:12px;font-weight:600;margin-right:4px">🎨 AI 提示词</span><span style="color:#888;font-size:12px">此图无 prompt</span>';
       return;
     }
     const catName = {comprehensive: '综合', material: '材质', lighting: '光线', mood: '氛围', commercial: '商业'};
     const catIcon = {comprehensive: '🎯', material: '🧱', lighting: '💡', mood: '🎭', commercial: '💼'};
-    let html = '<div style="font-size:13px;color:#fff;margin-bottom:8px;font-weight:600">🎨 AI 提示词(canvasweb image_prompts)</div>';
+    // 一行 5 个按钮
+    let html = '<span style="color:#fbbf24;font-size:12px;font-weight:600;margin-right:4px">🎨 AI 提示词</span>';
     for (const cat of cats) {
       const p = prompts[cat];
       if (!p || !p.prompt_text) continue;
-      const text = p.prompt_text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
       const name = catName[cat] || cat;
       const icon = catIcon[cat] || '📌';
-      html += `<div style="background:rgba(255,255,255,0.06);border-radius:6px;padding:8px 10px;margin-bottom:6px">`
-        + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">`
-        + `<span style="font-size:11px;color:#fbbf24;font-weight:600">${icon} ${name} <span style="color:#888;font-weight:400">(${p.word_count || text.length}字 · ${p.source || 'rule'})</span></span>`
-        + `<button onclick="copyText(\`${text.replace(/`/g, '\\\\`').replace(/\\\\/g, '\\\\')}\`)" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">📋 复制</button>`
-        + `</div>`
-        + `<div style="font-size:12px;line-height:1.5;color:rgba(255,255,255,0.85)">${text}</div>`
-        + `</div>`;
+      html += `<button class="prompt-cat-btn" data-cat="${cat}" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.18);color:#fff;padding:4px 10px;border-radius:14px;font-size:12px;cursor:pointer;transition:all 0.15s">${icon} ${name}</button>`;
     }
-    html += `<div style="color:#666;font-size:10px;margin-top:4px">来源: ${d.db || '?'} · cache 5min</div>`;
     container.innerHTML = html;
+    // 绑事件
+    container.querySelectorAll('.prompt-cat-btn').forEach(btn => {
+      btn.addEventListener('click', (e) => {
+        e.stopPropagation();
+        showPromptPopover(btn, btn.dataset.cat);
+      });
+    });
   } catch (e) {
-    container.innerHTML = '<div style="color:#f88;font-size:12px;margin-top:4px">提示词加载失败: ' + e.message + '</div>';
+    container.innerHTML = '<span style="color:#fbbf24;font-size:12px;font-weight:600;margin-right:4px">🎨 AI 提示词</span><span style="color:#f88;font-size:12px">加载失败</span>';
   }
 }
 
-function copyText(text) {
-  navigator.clipboard.writeText(text).then(() => {
-    // 简单反馈
-    const evt = new Event('click');
-    document.dispatchEvent(evt);
-  }).catch(() => {
-    // 旧浏览器 fallback
+function showPromptPopover(anchorEl, cat) {
+  closePromptPopover();  // 先关旧的
+  if (!_currentPrompts || !_currentPrompts[cat]) return;
+  const p = _currentPrompts[cat];
+  const catName = {comprehensive: '综合', material: '材质', lighting: '光线', mood: '氛围', commercial: '商业'};
+  const catIcon = {comprehensive: '🎯', material: '🧱', lighting: '💡', mood: '🎭', commercial: '💼'};
+  const name = catName[cat] || cat;
+  const icon = catIcon[cat] || '📌';
+  const text = p.prompt_text;
+
+  // 算位置:按钮下方,水平居中
+  const rect = anchorEl.getBoundingClientRect();
+  const pop = document.createElement('div');
+  pop.id = 'prompt-popover';
+  pop.style.cssText = `
+    position: fixed;
+    left: ${Math.max(8, rect.left - 100)}px;
+    top: ${rect.bottom + 8}px;
+    width: ${Math.min(window.innerWidth - 32, 520)}px;
+    max-height: 60vh;
+    background: rgba(28, 28, 32, 0.98);
+    border: 1px solid rgba(255,255,255,0.2);
+    border-radius: 10px;
+    padding: 14px 16px;
+    box-shadow: 0 16px 48px rgba(0,0,0,0.6);
+    z-index: 1000;
+    color: #fff;
+    overflow: auto;
+    backdrop-filter: blur(20px);
+  `;
+  pop.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
+      <span style="font-size:13px;font-weight:600;color:#fbbf24">${icon} ${name} <span style="color:#888;font-weight:400;font-size:11px;margin-left:6px">${p.word_count || text.length}字 · ${p.source || 'rule'}</span></span>
+      <div>
+        <button id="popover-copy" style="background:#0071e3;border:none;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;margin-right:6px">📋 复制</button>
+        <button id="popover-close" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">✕</button>
+      </div>
+    </div>
+    <div style="font-size:13px;line-height:1.65;color:rgba(255,255,255,0.92);white-space:pre-wrap">${text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+  `;
+  document.body.appendChild(pop);
+  // 绑事件
+  document.getElementById('popover-copy').onclick = (e) => {
+    e.stopPropagation();
+    copyToClipboard(text);
+    const btn = document.getElementById('popover-copy');
+    const o = btn.textContent;
+    btn.textContent = '✓ 已复制';
+    setTimeout(() => btn.textContent = o, 1500);
+  };
+  document.getElementById('popover-close').onclick = (e) => {
+    e.stopPropagation();
+    closePromptPopover();
+  };
+  // 高亮当前按钮
+  anchorEl.style.background = 'rgba(0,113,227,0.3)';
+  anchorEl.style.borderColor = 'rgba(0,113,227,0.6)';
+  anchorEl._wasActive = true;
+}
+
+function closePromptPopover() {
+  const old = document.getElementById('prompt-popover');
+  if (old) old.remove();
+  // 恢复按钮样式
+  document.querySelectorAll('.prompt-cat-btn._wasActive').forEach(b => {
+    b.style.background = 'rgba(255,255,255,0.08)';
+    b.style.borderColor = 'rgba(255,255,255,0.18)';
+    b._wasActive = false;
+  });
+}
+
+function copyToClipboard(text) {
+  if (navigator.clipboard && navigator.clipboard.writeText) {
+    navigator.clipboard.writeText(text);
+  } else {
     const ta = document.createElement('textarea');
     ta.value = text;
     document.body.appendChild(ta);
     ta.select();
-    document.execCommand('copy');
+    try { document.execCommand('copy'); } catch(e) {}
     document.body.removeChild(ta);
-  });
-  // 视觉提示
-  const all = document.querySelectorAll('button');
-  all.forEach(b => { if (b.textContent.includes('复制')) { const o = b.textContent; b.textContent = '✓ 已复制'; setTimeout(() => b.textContent = o, 1200); }});
+  }
 }
 
-function closeModal() { document.getElementById('modal').classList.remove('open'); }
+// 点其他位置关 popover
+document.addEventListener('click', (e) => {
+  const pop = document.getElementById('prompt-popover');
+  if (pop && !pop.contains(e.target) && !e.target.classList.contains('prompt-cat-btn')) {
+    closePromptPopover();
+  }
+});
+
+// Esc 关
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape') closePromptPopover();
+});
+
+function closeModal() {
+  document.getElementById('modal').classList.remove('open');
+  closePromptPopover();
+}
 
 function openUpload() {
   document.getElementById('upload-area').classList.add('open');
