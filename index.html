@@ -1205,40 +1205,38 @@ function showPromptPopover(anchorEl, cat) {
   const icon = catIcon[cat] || '📌';
   const text = p.prompt_text;
 
-  // 算位置:模态框右下角空白区(图右侧),不挡图
-  const vw = window.innerWidth;
-  const vh = window.innerHeight;
-  // 图在 modal 居中,图右侧有空白
-  // popover 放右下,宽度 460,距右 40,距下 100(按钮上面)
-  const popW = 460;
-  const popMaxH = Math.min(vh * 0.55, 440);
+  // 算位置:叠在图底部 1/4,跟图同宽,80% 透明(图说字幕风格)
+  const img = document.getElementById('modal-img');
+  const r = img.getBoundingClientRect();
+  const popH = Math.round(r.height * 0.4);  // 占图下 1/4 (~40% 给点呼吸)
   const pop = document.createElement('div');
   pop.id = 'prompt-popover';
   pop.style.cssText = `
     position: fixed;
-    right: 40px;
-    bottom: 110px;
-    width: ${popW}px;
-    max-height: ${popMaxH}px;
-    background: rgba(28, 28, 32, 0.98);
-    border: 1px solid rgba(255,255,255,0.2);
-    border-radius: 12px;
-    padding: 16px 20px;
-    box-shadow: 0 24px 64px rgba(0,0,0,0.7);
+    left: ${r.left}px;
+    top: ${r.bottom - popH}px;
+    width: ${r.width}px;
+    height: ${popH}px;
+    background: rgba(20, 20, 28, 0.8);
+    border: none;
+    border-top: 1px solid rgba(255,255,255,0.15);
+    border-radius: 0 0 12px 12px;
+    padding: 12px 20px;
+    box-shadow: none;
     z-index: 200;
     color: #fff;
     overflow: auto;
-    backdrop-filter: blur(20px);
+    backdrop-filter: blur(8px);
   `;
   pop.innerHTML = `
-    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
-      <span style="font-size:13px;font-weight:600;color:#fbbf24">${icon} ${name} <span style="color:#888;font-weight:400;font-size:11px;margin-left:6px">${p.word_count || text.length}字 · ${p.source || 'rule'}</span></span>
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
+      <span style="font-size:12px;font-weight:600;color:#fbbf24;text-shadow:0 1px 2px rgba(0,0,0,0.8)">${icon} ${name} <span style="color:#aaa;font-weight:400;font-size:10px;margin-left:6px">${p.word_count || text.length}字 · ${p.source || 'rule'}</span></span>
       <div>
-        <button id="popover-copy" style="background:#0071e3;border:none;color:#fff;padding:4px 12px;border-radius:6px;font-size:12px;cursor:pointer;margin-right:6px">📋 复制</button>
-        <button id="popover-close" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:4px 10px;border-radius:6px;font-size:12px;cursor:pointer">✕</button>
+        <button id="popover-copy" style="background:#0071e3;border:none;color:#fff;padding:3px 10px;border-radius:5px;font-size:11px;cursor:pointer;margin-right:4px">📋 复制</button>
+        <button id="popover-close" style="background:rgba(255,255,255,0.15);border:1px solid rgba(255,255,255,0.25);color:#fff;padding:3px 8px;border-radius:5px;font-size:11px;cursor:pointer">✕</button>
       </div>
     </div>
-    <div style="font-size:13px;line-height:1.65;color:rgba(255,255,255,0.92);white-space:pre-wrap">${text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
+    <div style="font-size:12px;line-height:1.55;color:rgba(255,255,255,0.95);text-shadow:0 1px 2px rgba(0,0,0,0.7)">${text.replace(/</g,'&lt;').replace(/>/g,'&gt;')}</div>
   `;
   document.body.appendChild(pop);
   // 绑事件
