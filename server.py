@@ -11,6 +11,12 @@ PICTUREWEB_HOME = os.environ.get('PICTUREWEB_HOME', 'D:/Mac/Mac/workteam/05_spac
 # PictureWeb 的 DB 在 05_Space 子目录;其他项目各自分类下
 # 可通过环境变量 PICTUREWEB_DB_ROOT 覆盖
 PICTUREWEB_DB_ROOT = os.environ.get('PICTUREWEB_DB_ROOT', r'D:\Database\Database')
+# v2.1.0:canvasweb 提示词 API(从 image_prompts 表读)
+# PictureWeb 调 canvasweb 的 /api/image_prompts 拿 5 类 prompt
+# 默认指向 canvasweb 当前运行的端口 9002(AGENTS.md 写 8085 但实际部署在 9002)
+CANVASWEB_PROMPTS_URL = os.environ.get('CANVASWEB_PROMPTS_URL', 'http://127.0.0.1:9002/api/image_prompts')
+PROMPTS_CACHE = {}  # image_id -> (ts, prompts); 5 分钟 TTL
+PROMPTS_TTL = 300
 # DB 在 PictureWeb 同级的 PictureDb/ 下(2026-06-28 修正:有数据的库在 _ArchitectLib/PictureDb/)
 DB = os.path.join(PICTUREWEB_HOME, '_ArchitectLib', 'PictureDb', 'PictureDb.db')
 FAV_FILE = os.path.join(os.path.dirname(__file__), 'favorites.json')
@@ -233,6 +239,9 @@ class Handler(SimpleHTTPRequestHandler):
                 'default': DEFAULT_DB_NAME,
                 'databases': [{'name': d['name'], 'rel': d['rel'], 'count': d['count']} for d in DB_LIST],
             })
+        elif parsed.path == '/api/prompts':
+            # v2.1.0:从 canvasweb 拉 5 类 prompt
+            self._serve_prompts(parsed)
         elif parsed.path == '/api/img':
             # v2.0.8:从当前 DB 读 abs_path 服务图片(任何路径都能用)
             self._serve_img(parsed)
@@ -301,6 +310,54 @@ class Handler(SimpleHTTPRequestHandler):
         """检查请求是否来自 ADMIN_IPS(自动从 config 同步,避免硬编码不一致)"""
         client_ip = self.client_address[0]
         return client_ip in ADMIN_IPS
+
+    def _fetch_prompts(self, image_id):
+        # v2.1.0:从当前 DB 直接读 image_prompts 表(跨 DB 准确,canvasweb 共享 image_prompts schema)
+        import time as _t
+        now = _t.time()
+        cache_key = (self._db_name, image_id)
+        cached = PROMPTS_CACHE.get(cache_key)
+        if cached and now - cached[0] < PROMPTS_TTL:
+            return cached[1]
+        result = {'image_id': image_id, 'db': self._db_name, 'prompts': {}, 'categories': []}
+        try:
+            conn = sqlite3.connect(self._db)
+            has_table = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_prompts'").fetchone()
+            if not has_table:
+                conn.close()
+                return result  # 该 DB 没 image_prompts 表
+            rows = conn.execute('SELECT category, prompt_text, word_count, source, lang FROM image_prompts WHERE image_id = ?', (image_id,)).fetchall()
+            conn.close()
+            prompts = {}
+            categories = []
+            for r in rows:
+                cat, text, wc, src, lang = r
+                if not text: continue
+                prompts[cat] = {'prompt_text': text, 'word_count': wc or len(text), 'source': src or 'rule', 'lang': lang or 'zh'}
+                categories.append(cat)
+            result['prompts'] = prompts
+            result['categories'] = categories
+        except Exception as e:
+            result['error'] = str(e)
+        PROMPTS_CACHE[cache_key] = (now, result)
+        return result
+
+    def _serve_prompts(self, parsed):
+        # v2.1.0:GET /api/prompts?id=N — 5 类 prompt 代理
+        from urllib.parse import parse_qs
+        qs = parse_qs(parsed.query)
+        ids = qs.get('id', [])
+        if not ids:
+            self._json({'error': 'missing id'}, status=400); return
+        try:
+            image_id = int(ids[0])
+        except (ValueError, TypeError):
+            self._json({'error': 'invalid id'}, status=400); return
+        result = self._fetch_prompts(image_id)
+        # 加上当前 DB 信息,方便前端知道 prompts 来自哪个库
+        result['db'] = self._db_name
+        result['served_at'] = self._db  # 当前 DB 路径(调试用)
+        self._json(result)
 
     def _serve_img(self, parsed):
         """v2.0.8:从当前 DB 读 abs_path,直接流式返回图片
@@ -741,6 +798,8 @@ if __name__ == '__main__':
     print(f'DB: {DB}', flush=True)
     print(f'DB_ROOT: {PICTUREWEB_DB_ROOT} (扫库用)', flush=True)
     print(f'IMG_ROOT: {IMG_ROOT} (图根,不动)', flush=True)
+    print(f'CANVASWEB_PROMPTS_URL: {CANVASWEB_PROMPTS_URL} (canvasweb · fallback 用)', flush=True)
+    print(f'prompts: 直接读当前 DB image_prompts 表(跨 DB 准确) + 5min cache', flush=True)
     print(f'可用数据库({len(DB_LIST)}个):', flush=True)
     for d in DB_LIST:
         marker = ' *' if d['name'] == DEFAULT_DB_NAME else '  '

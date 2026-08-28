@@ -446,6 +446,9 @@ h1 {
 .modal-info {
   color: rgba(255,255,255,0.9);
   margin-top: 16px;
+  max-width: 700px;
+  text-align: left;
+}
   max-width: 90%;
   font-size: 14px;
 }
@@ -1137,8 +1140,68 @@ function openModal(item) {
     <div>空间: ${item.space||'-'} | 材料: ${item.material||'-'}</div>
     <div style="color:#888;margin-top:6px">路径: ${item.path}</div>
     ${favHtml}
+    <div id="modal-prompts" style="margin-top:14px;padding-top:12px;border-top:1px solid rgba(255,255,255,0.15)">
+      <div style="color:#888;font-size:12px">加载 AI 提示词中...</div>
+    </div>
   `;
   document.getElementById('modal').classList.add('open');
+  // v2.1.0:异步拉 5 类 prompt
+  loadPrompts(item.id);
+}
+
+async function loadPrompts(imageId) {
+  const container = document.getElementById('modal-prompts');
+  if (!container) return;
+  try {
+    const r = await fetch('/api/prompts?id=' + imageId);
+    const d = await r.json();
+    const prompts = d.prompts || {};
+    const cats = d.categories || Object.keys(prompts);
+    if (cats.length === 0 || Object.keys(prompts).length === 0) {
+      container.innerHTML = '<div style="color:#888;font-size:12px;margin-top:4px">无 AI 提示词(此图未打 prompt)</div>';
+      return;
+    }
+    const catName = {comprehensive: '综合', material: '材质', lighting: '光线', mood: '氛围', commercial: '商业'};
+    const catIcon = {comprehensive: '🎯', material: '🧱', lighting: '💡', mood: '🎭', commercial: '💼'};
+    let html = '<div style="font-size:13px;color:#fff;margin-bottom:8px;font-weight:600">🎨 AI 提示词(canvasweb image_prompts)</div>';
+    for (const cat of cats) {
+      const p = prompts[cat];
+      if (!p || !p.prompt_text) continue;
+      const text = p.prompt_text.replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      const name = catName[cat] || cat;
+      const icon = catIcon[cat] || '📌';
+      html += `<div style="background:rgba(255,255,255,0.06);border-radius:6px;padding:8px 10px;margin-bottom:6px">`
+        + `<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:4px">`
+        + `<span style="font-size:11px;color:#fbbf24;font-weight:600">${icon} ${name} <span style="color:#888;font-weight:400">(${p.word_count || text.length}字 · ${p.source || 'rule'})</span></span>`
+        + `<button onclick="copyText(\`${text.replace(/`/g, '\\\\`').replace(/\\\\/g, '\\\\')}\`)" style="background:rgba(255,255,255,0.1);border:1px solid rgba(255,255,255,0.2);color:#fff;padding:2px 8px;border-radius:4px;font-size:11px;cursor:pointer">📋 复制</button>`
+        + `</div>`
+        + `<div style="font-size:12px;line-height:1.5;color:rgba(255,255,255,0.85)">${text}</div>`
+        + `</div>`;
+    }
+    html += `<div style="color:#666;font-size:10px;margin-top:4px">来源: ${d.db || '?'} · cache 5min</div>`;
+    container.innerHTML = html;
+  } catch (e) {
+    container.innerHTML = '<div style="color:#f88;font-size:12px;margin-top:4px">提示词加载失败: ' + e.message + '</div>';
+  }
+}
+
+function copyText(text) {
+  navigator.clipboard.writeText(text).then(() => {
+    // 简单反馈
+    const evt = new Event('click');
+    document.dispatchEvent(evt);
+  }).catch(() => {
+    // 旧浏览器 fallback
+    const ta = document.createElement('textarea');
+    ta.value = text;
+    document.body.appendChild(ta);
+    ta.select();
+    document.execCommand('copy');
+    document.body.removeChild(ta);
+  });
+  // 视觉提示
+  const all = document.querySelectorAll('button');
+  all.forEach(b => { if (b.textContent.includes('复制')) { const o = b.textContent; b.textContent = '✓ 已复制'; setTimeout(() => b.textContent = o, 1200); }});
 }
 
 function closeModal() { document.getElementById('modal').classList.remove('open'); }

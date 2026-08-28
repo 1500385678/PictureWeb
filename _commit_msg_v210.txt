@@ -1,0 +1,23 @@
+feat: v2.1.0 modal 显示 canvasweb AI 提示词(5 类)
+
+需求:张勇希望 Birmingham Stadium 那张图 modal 下面显示 AI 提示词(直接拿来用),
+而 canvasweb 的 image_prompts 表已经存了 597 张图 5 类 prompt(comprehensive/
+material/lighting/mood/commercial),全 100% 覆盖。
+
+实施(经 canvasweb-architect 兄弟 session 协调确认):
+1. server.py 加 /api/prompts?id=N 端点,直接读当前 DB 的 image_prompts 表
+2. 5min 内存缓存,cache key 含 db_name(避免跨 DB 污染)
+3. image_prompts 表与 images 表同库(共享 PictureDb.db / RendingDb.db)
+4. index.html modal 加「AI 提示词」section,5 类卡片+每类「📋 复制」按钮
+5. 跨 DB 自动隔离:切到 RendingDb 看 Birmingham 自动用 RendingDb 的 prompt
+
+验证(浏览器实测):
+- RendingDb Birmingham id=7 → "纪念性尺度的工业厂房,冷调夜景"(RendingDb 自己的 prompt)
+- PictureDb id=7 → "human-scale的文化建筑,日间光"(PictureDb 自己的 prompt)
+- 不混淆,跨 DB 准确
+
+放弃:最初想 HTTP 调 canvasweb /api/image_prompts,后来发现 canvasweb 不知当前 DB,
+返回的总是 PictureDb 内容。改成 PictureWeb 直接读 image_prompts 表,简单且准确。
+canvasweb 是 source of truth(PictureWeb 不动它的 schema,只读)。
+
+v2.1.0
