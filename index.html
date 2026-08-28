@@ -1205,10 +1205,10 @@ function showPromptPopover(anchorEl, cat) {
   const icon = catIcon[cat] || '📌';
   const text = p.prompt_text;
 
-  // 算位置:叠在图底部 1/4,跟图同宽,80% 透明(图说字幕风格)
+  // 算位置:叠在图底部,跟图同宽,50% 透明(图说字幕风格)
   const img = document.getElementById('modal-img');
   const r = img.getBoundingClientRect();
-  const popH = Math.round(r.height * 0.4);  // 占图下 1/4 (~40% 给点呼吸)
+  const popH = Math.round(r.height * 0.28);  // 矮一点,占图下 28%
   const pop = document.createElement('div');
   pop.id = 'prompt-popover';
   pop.style.cssText = `
@@ -1217,16 +1217,16 @@ function showPromptPopover(anchorEl, cat) {
     top: ${r.bottom - popH}px;
     width: ${r.width}px;
     height: ${popH}px;
-    background: rgba(20, 20, 28, 0.8);
+    background: rgba(20, 20, 28, 0.5);
     border: none;
-    border-top: 1px solid rgba(255,255,255,0.15);
+    border-top: 1px solid rgba(255,255,255,0.12);
     border-radius: 0 0 12px 12px;
-    padding: 12px 20px;
+    padding: 10px 20px;
     box-shadow: none;
     z-index: 200;
     color: #fff;
     overflow: auto;
-    backdrop-filter: blur(8px);
+    backdrop-filter: blur(6px);
   `;
   pop.innerHTML = `
     <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:6px">
