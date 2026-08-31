@@ -491,6 +491,31 @@ class Handler(SimpleHTTPRequestHandler):
                 'arch_type': r['arch_type'] or '', 'render_company': r['render_company'] or '',
                 'view_type': (r['view_type'] if 'view_type' in r.keys() else '') or '',
             })
+        # v2.1.4:FTS5 不分中文 — 查询有中文且 0 结果时用 LIKE 兜底
+        if use_fts and not out and q.strip() and any('\u4e00' <= c <= '\u9fff' for c in q):
+            conn2 = sqlite3.connect(self._db)
+            conn2.row_factory = sqlite3.Row
+            like_sql = "SELECT id, project, filename, abs_path, scene, light, space, material, mood, caption, phash, arch_type, render_company, view_type FROM images WHERE (project LIKE ? OR filename LIKE ? OR scene LIKE ? OR light LIKE ? OR space LIKE ? OR material LIKE ? OR mood LIKE ? OR caption LIKE ? OR chapter_name LIKE ?)"
+            like_p = [f'%{q}%'] * 9
+            for k, v in [('project', project), ('scene', scene), ('light', light), ('mood', mood), ('arch', arch), ('company', company), ('view_type', view_type)]:
+                if v:
+                    like_sql += f" AND {k} = ?"
+                    like_p.append(v)
+            like_sql += f" ORDER BY id DESC LIMIT {limit}"
+            out2 = []
+            for r in conn2.execute(like_sql, like_p).fetchall():
+                out2.append({
+                    'id': r['id'], 'project': r['project'], 'filename': r['filename'],
+                    'path': r['abs_path'], 'url': to_img_url(r['id']),
+                    'scene': r['scene'] or '', 'light': r['light'] or '',
+                    'space': r['space'] or '', 'material': r['material'] or '',
+                    'mood': r['mood'] or '', 'caption': r['caption'] or '',
+                    'phash': r['phash'] or '',
+                    'arch_type': r['arch_type'] or '', 'render_company': r['render_company'] or '',
+                    'view_type': (r['view_type'] if 'view_type' in r.keys() else '') or '',
+                })
+            conn2.close()
+            return out2
         conn.close()
         return out
 
