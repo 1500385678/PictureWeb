@@ -1334,11 +1334,22 @@ function showModalFavStar(itemId) {
   star.onmouseout = () => { star.style.transform = 'scale(1)'; };
   star.onclick = (e) => {
     e.stopPropagation();
-    toggleFav(itemId);
-    // v2.1.3:原地更新图标和颜色,不重新创建(位置稳定)
-    const nowFav = favs.includes(itemId);
+    e.preventDefault();
+    // v2.1.5 修复:乐观更新 — 立即翻转 UI,避免 stale favs 看不到反馈
+    // 原因:toggleFav() 是 async,await fetch 后才更新 favs 数组;
+    //      之前先 toggle 再读 favs,读到的是 stale 值,UI 写回原值(☆→☆)
+    //      第二次点击时 favs 才是上一次的结果,所以才能看到 ★
+    const wasFav = favs.includes(itemId);
+    const nowFav = !wasFav;
     star.textContent = nowFav ? '★' : '☆';
     star.style.color = nowFav ? '#ff3b30' : 'rgba(255,255,255,0.9)';
+    // 后台同步:toggleFav 内部会更新 favs + updateFavBtns(grid 卡片会同步)
+    // 失败回滚 UI
+    toggleFav(itemId).catch(err => {
+      console.error('toggleFav failed:', err);
+      star.textContent = wasFav ? '★' : '☆';
+      star.style.color = wasFav ? '#ff3b30' : 'rgba(255,255,255,0.9)';
+    });
   };
   document.body.appendChild(star);
 }
