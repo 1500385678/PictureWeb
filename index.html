@@ -1139,20 +1139,22 @@ function renderCards(items) {
 
 function openModal(item) {
   document.getElementById('modal-img').src = item.url;
-  const favHtml = `<button class="fav-btn ${favs.includes(item.id)?'active':''}" style="position:static;width:auto;padding:6px 14px;border-radius:4px;margin-top:8px" onclick="toggleFav(${item.id}); this.textContent='${favs.includes(item.id)?'★ 取消收藏':'☆ 收藏'}'">${favs.includes(item.id)?'★ 取消收藏':'☆ 收藏'}</button>`;
+  // v2.1.2:简化 — 移除大按钮,星标叠在图片左下角
+  const isFav = favs.includes(item.id);
   document.getElementById('modal-info').innerHTML = `
     <div style="font-size:18px;color:#fff;margin-bottom:8px">${item.filename}</div>
     <div>项目: ${item.project}</div>
     <div>场景: ${item.scene||'-'} | 光线: ${item.light||'-'} | 氛围: ${item.mood||'-'}</div>
     <div>空间: ${item.space||'-'} | 材料: ${item.material||'-'}</div>
     <div style="color:#888;margin-top:6px">路径: ${item.path}</div>
-    ${favHtml}
     <div id="modal-prompt-btns" style="margin-top:10px;display:flex;gap:4px;flex-wrap:nowrap;align-items:center;overflow-x:auto;scrollbar-width:none;width:100%">
       <span style="color:#fbbf24;font-size:11px;font-weight:600;margin-right:6px;flex:0 0 auto;white-space:nowrap">🎨 AI 提示词</span>
       <span id="prompt-btns-loading" style="color:#888;font-size:11px">加载中...</span>
     </div>
   `;
   document.getElementById('modal').classList.add('open');
+  // v2.1.2:图片左下角收藏星标
+  showModalFavStar(item.id);
   // v2.1.0:异步拉 5 类 prompt
   loadPrompts(item.id);
 }
@@ -1298,6 +1300,49 @@ document.addEventListener('keydown', (e) => {
 function closeModal() {
   document.getElementById('modal').classList.remove('open');
   closePromptPopover();
+  closeModalFavStar();
+}
+
+// v2.1.2:图片左下角收藏星标(类似 popover,fixed 定位)
+function showModalFavStar(itemId) {
+  closeModalFavStar();
+  const img = document.getElementById('modal-img');
+  const r = img.getBoundingClientRect();
+  const isFav = favs.includes(itemId);
+  const star = document.createElement('button');
+  star.id = 'modal-fav-star';
+  star.style.cssText = `
+    position: fixed;
+    left: ${r.left + 16}px;
+    top: ${r.bottom - 36}px;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    background: rgba(0,0,0,0.5);
+    border: none;
+    color: ${isFav ? '#ff3b30' : 'rgba(255,255,255,0.9)'};
+    font-size: 20px;
+    line-height: 32px;
+    text-align: center;
+    cursor: pointer;
+    z-index: 201;
+    backdrop-filter: blur(8px);
+    transition: transform 0.1s;
+  `;
+  star.textContent = isFav ? '★' : '☆';
+  star.onmouseover = () => { star.style.transform = 'scale(1.15)'; };
+  star.onmouseout = () => { star.style.transform = 'scale(1)'; };
+  star.onclick = (e) => {
+    e.stopPropagation();
+    toggleFav(itemId);
+    // 重新画(状态变化)
+    showModalFavStar(itemId);
+  };
+  document.body.appendChild(star);
+}
+function closeModalFavStar() {
+  const s = document.getElementById('modal-fav-star');
+  if (s) s.remove();
 }
 
 function openUpload() {
