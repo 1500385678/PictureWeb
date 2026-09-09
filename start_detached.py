@@ -69,11 +69,13 @@ def spawn_server():
 
 
 def is_alive(pid):
+    # 关键:不用 text=True(UTF-8 解码中文 cp936 字节会 UnicodeDecodeError)
+    # 改用 bytes 模式 + errors='replace' 兜底
     try:
         out = subprocess.check_output(
-            f'tasklist /FI "PID eq {pid}"', shell=True, text=True, timeout=5,
+            f'tasklist /FI "PID eq {pid}"', shell=True, timeout=5,
         )
-        return str(pid) in out
+        return str(pid).encode() in out
     except Exception:
         return False
 
@@ -82,9 +84,9 @@ def port_listening():
     try:
         out = subprocess.check_output(
             f'netstat -ano | findstr ":{PORT} " | findstr LISTENING',
-            shell=True, text=True, timeout=5,
+            shell=True, timeout=5,
         )
-        return bool(out.strip())
+        return b"LISTENING" in out
     except Exception:
         return False
 
