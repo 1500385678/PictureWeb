@@ -87,8 +87,8 @@ h1 {
   height: 24px;
 }
 
-.search-box select { width: 62px; min-width: 0; }
-.search-box input#q { width: 140px; }
+.search-box select { width: 92px; min-width: 0; }
+.search-box input#q { width: 220px; }
 
 .search-box input:focus,
 .search-box select:focus {
@@ -774,6 +774,9 @@ h1 {
 <header>
   <h1>PictureWeb</h1>
   <div class="search-box">
+    <!-- v2.1.7:数据库切换移到主搜索栏最左(2026-09-23) -->
+    <select id="db-select" onchange="switchDb(this.value)" style="background:#1a1a1a;border:1px solid #3a3a3a;color:#eaeaea;padding:3px 9px;border-radius:6px;font-size:11.5px;cursor:pointer;min-width:160px;height:24px" title="切换数据库"></select>
+    <span id="db-count" style="color:#86868b;font-size:11px;margin-left:2px"></span>
     <input id="q" type="text" placeholder="搜索关键词，如：黄昏鸟瞰、住宅、教堂..." autofocus>
     <select id="project" data-label="项目"><option value=""></option></select>
     <select id="scene" data-label="场景"><option value=""></option></select>
@@ -789,9 +792,6 @@ h1 {
   <div class="keywords-box" id="kw-box">
     <span style="color:#888;font-size:12px">多关键词：</span>
     <input id="kw-input" type="text" placeholder="搜索" style="background:#1a1a1a;border:1px solid #3a3a3a;color:#eaeaea;padding:4px 10px;border-radius:12px;font-size:12px;width:160px">
-    <!-- v2.0.8:数据库切换(2026-08-18) -->
-    <select id="db-select" onchange="switchDb(this.value)" style="background:#1a1a1a;border:1px solid #3a3a3a;color:#eaeaea;padding:4px 10px;border-radius:12px;font-size:12px;margin-left:6px;cursor:pointer" title="切换数据库"></select>
-    <span id="db-count" style="color:#86868b;font-size:11px;margin-left:4px"></span>
   </div>
   <div class="tab-bar">
     <div class="tab active" data-mode="normal" onclick="setMode('normal')">普通搜</div>

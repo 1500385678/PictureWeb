@@ -5,6 +5,10 @@ favorites.json
 _ai_req.json
 _ai_video_req.json
 *.tmp
+# 临时输出文件(调试 cmd 输出重定向:_tmp_xxx.out 等)
+*.out
+# 临时调试目录(layout/UI/数据探测等)
+.scratch/
 # 临时 python 脚本(_xxx.py / _test_*.py 之类)
 _*.py
 # 测试用临时目录(其他项目的 .AutoEvolution 误入)
@@ -16,6 +20,8 @@ server.err
 daemon.out
 daemon.err
 *.log
+# .Log/ 是项目能力 append 目录,*.log 在 Windows case-insensitive 下误匹配
+!.Log/
 # logs/ 整个目录(9001/8082/9003 各端口 server 输出 + 临时启动 log)
 logs/
 

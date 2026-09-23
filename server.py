@@ -42,6 +42,10 @@ def _scan_dbs():
             # 跳 Thumbs.db (Windows 缩略图缓存,不是 sqlite,只是减少噪音)
             if fn.lower() == 'thumbs.db':
                 continue
+            # 跳备份文件(.pre-fix- / .pre-sync- / .bak. / .pre-sync2- 等)
+            # 2026-09-23:之前备份文件被当库列出来,需要过滤
+            if any(marker in fn.lower() for marker in ('.pre-', '.bak.', '.backup.')):
+                continue
             full = os.path.join(dirpath, fn)
             norm = os.path.normcase(os.path.abspath(full))
             if norm in seen:
@@ -59,11 +63,10 @@ def _scan_dbs():
                 conn.close()
                 if count == 0:
                     continue
-                parent = os.path.basename(dirpath)
-                if parent.endswith('Db') or parent.endswith('DB'):
-                    db_name = parent.lstrip('_')  # 去掉前缀下划线,_AnalysisDb -> AnalysisDb
-                else:
-                    db_name = os.path.splitext(fn)[0]
+                # db_name 派生:2026-09-23 统一用文件名(去扩展名 + 去下划线)
+                # 之前 parent.endswith('Db') 时用 parent 名,导致顶层 SpaceDb.db
+                # 错被命名为 01_Space_ImageDb(父目录名)
+                db_name = os.path.splitext(fn)[0].lstrip('_')  # SpaceDb.db -> SpaceDb; _AnalysisDb.db -> AnalysisDb
                 out.append({
                     'name': db_name,
                     'path': full,
@@ -83,7 +86,9 @@ def _scan_dbs():
     return out
 
 DB_LIST = _scan_dbs()
-DEFAULT_DB_NAME = 'PictureDb'
+# 默认库:支持 PICTUREWEB_DEFAULT_DB 环境变量覆盖(2026-09-22)
+# 优先级:env > 'PictureDb'(向后兼容)> DB_LIST[0](fallback)
+DEFAULT_DB_NAME = os.environ.get('PICTUREWEB_DEFAULT_DB', 'PictureDb')
 if not any(d['name'] == DEFAULT_DB_NAME for d in DB_LIST):
     DEFAULT_DB_NAME = DB_LIST[0]['name'] if DB_LIST else 'PictureDb'
 DEFAULT_DB_PATH = next((d['path'] for d in DB_LIST if d['name'] == DEFAULT_DB_NAME), '')
@@ -173,6 +178,15 @@ class Handler(SimpleHTTPRequestHandler):
         self._db_name = get_db_name_from_cookie(self.headers.get('Cookie', ''))
         self._db = get_db_path(self._db_name)
         parsed = urllib.parse.urlparse(self.path)
+
+        # 2026-09-25:admin endpoint — 让 server 自己退出,watchdog 拉起加载新代码
+        if parsed.path == '/admin/restart':
+            self._json({'ok': True, 'message': 'restarting in 0.5s, watchdog will relaunch'})
+            import threading as _thr
+            def _do_exit():
+                import time as _t; _t.sleep(0.5); os._exit(0)
+            _thr.Thread(target=_do_exit, daemon=True).start()
+            return
 
         # /img/* 直接从 IMG_ROOT 提供静态文件
         if parsed.path.startswith('/img/'):
@@ -313,6 +327,8 @@ class Handler(SimpleHTTPRequestHandler):
 
     def _fetch_prompts(self, image_id):
         # v2.1.0:从当前 DB 直接读 image_prompts 表(跨 DB 准确,canvasweb 共享 image_prompts schema)
+        # 2026-09-25:本地缺 NEW_5(era/phase/story/technical/time,rule-template-v2)任一类时
+        # 自动 fallback canvasweb HTTP 拿全 10 类,upsert 回本地(后续直接走本地,免维护)
         import time as _t
         now = _t.time()
         cache_key = (self._db_name, image_id)
@@ -320,21 +336,63 @@ class Handler(SimpleHTTPRequestHandler):
         if cached and now - cached[0] < PROMPTS_TTL:
             return cached[1]
         result = {'image_id': image_id, 'db': self._db_name, 'prompts': {}, 'categories': []}
+        NEW_5 = {'era', 'phase', 'story', 'technical', 'time'}
         try:
-            conn = sqlite3.connect(self._db)
+            conn = sqlite3.connect(self._db, timeout=10)
             has_table = conn.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='image_prompts'").fetchone()
-            if not has_table:
-                conn.close()
-                return result  # 该 DB 没 image_prompts 表
-            rows = conn.execute('SELECT category, prompt_text, word_count, source, lang FROM image_prompts WHERE image_id = ?', (image_id,)).fetchall()
+            if has_table:
+                rows = conn.execute('SELECT category, prompt_text, word_count, source, lang FROM image_prompts WHERE image_id = ?', (image_id,)).fetchall()
+                prompts = {}
+                categories = []
+                for r in rows:
+                    cat, text, wc, src, lang = r
+                    if not text: continue
+                    prompts[cat] = {'prompt_text': text, 'word_count': wc or len(text), 'source': src or 'rule', 'lang': lang or 'zh'}
+                    categories.append(cat)
+                result['prompts'] = prompts
+                result['categories'] = categories
+            else:
+                prompts = {}
+                categories = []
+            # 缺 NEW_5 任一类时 fallback canvasweb HTTP,upsert 回本地
+            missing = NEW_5 - set(prompts.keys())
+            if missing:
+                try:
+                    import urllib.request as _ur
+                    cw_url = f'{CANVASWEB_PROMPTS_URL}?image_id={image_id}'
+                    with _ur.urlopen(cw_url, timeout=5) as r:
+                        cw_data = json.loads(r.read())
+                    cw_prompts = cw_data.get('prompts', {})
+                    fetched = 0
+                    for cat, p in cw_prompts.items():
+                        if cat not in NEW_5:
+                            continue
+                        text = p.get('prompt_text', '')
+                        if not text:
+                            continue
+                        wc = p.get('word_count', len(text))
+                        lang = p.get('lang', 'zh')
+                        src = p.get('source', 'rule-template-v2')
+                        upd = p.get('updated_at', '2026-09-02 12:00:46')
+                        prompts[cat] = {'prompt_text': text, 'word_count': wc, 'source': src, 'lang': lang}
+                        if cat not in categories:
+                            categories.append(cat)
+                        # upsert 回本地(下次直接走本地,不用再调 canvasweb)
+                        if has_table:
+                            cur = conn.cursor()
+                            cur.execute('SELECT id FROM image_prompts WHERE image_id=? AND category=?', (image_id, cat))
+                            row = cur.fetchone()
+                            if row:
+                                cur.execute('UPDATE image_prompts SET prompt_text=?, word_count=?, lang=?, source=?, updated_at=? WHERE id=?', (text, wc, lang, src, upd, row[0]))
+                            else:
+                                cur.execute('INSERT INTO image_prompts (image_id, category, prompt_text, word_count, lang, source, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?)', (image_id, cat, text, wc, lang, src, upd))
+                            conn.commit()
+                        fetched += 1
+                    if fetched:
+                        result['source'] = 'canvasweb_fallback'
+                except Exception as e:
+                    result['fallback_error'] = str(e)
             conn.close()
-            prompts = {}
-            categories = []
-            for r in rows:
-                cat, text, wc, src, lang = r
-                if not text: continue
-                prompts[cat] = {'prompt_text': text, 'word_count': wc or len(text), 'source': src or 'rule', 'lang': lang or 'zh'}
-                categories.append(cat)
             result['prompts'] = prompts
             result['categories'] = categories
         except Exception as e:
@@ -384,6 +442,13 @@ class Handler(SimpleHTTPRequestHandler):
         # 旧 Mac 路径 → 新路径映射(2026-08-18 v2.0.8:搬迁后的兼容)
         if abs_path.startswith(OLD_IMG_ROOT):
             abs_path = abs_path.replace(OLD_IMG_ROOT, IMG_ROOT)
+        # 2026-09-25:Windows 老路径 → 新 G 盘图根映射(项目从 D:/Mac/Mac/Mac/... 搬到 G:/_MyGitProject)
+        # DB 里 abs_path 是 D:/Mac/Mac/Mac/workteam/05_space/03_architect/Mobile/07-Rending/...
+        # 实际图在 G:/_MyDatabase/07-Rending/...
+        ABS_OLD_WIN = 'D:/Mac/Mac/Mac/workteam/05_space/03_architect/Mobile/'
+        ABS_NEW_WIN = r'G:/_MyDatabase/'
+        if abs_path.startswith(ABS_OLD_WIN):
+            abs_path = abs_path.replace(ABS_OLD_WIN, ABS_NEW_WIN).replace('\\', '/')
         if not os.path.isfile(abs_path):
             self.send_error(404, f'file not found: {abs_path}'); return
         ext = abs_path.rsplit('.', 1)[-1].lower() if '.' in abs_path else ''

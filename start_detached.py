@@ -17,9 +17,9 @@ import signal
 import subprocess
 import atexit
 
-WD = r"D:\Mac\Mac\Mac\workteam\05_space\03_architect\Mobile\_ArchitectMobileLib\PictureWeb"
+WD = r"G:\_MyGitProject\PictureWeb"
 PY = r"C:\Users\yongzhang\AppData\Local\Programs\Python\Python312\python.exe"
-PORT = "9004"
+PORT = "8081"
 LOG_OUT = os.path.join(WD, "logs", "server.out.log")
 LOG_ERR = os.path.join(WD, "logs", "server.err.log")
 CHECK_INTERVAL = 30  # 秒
@@ -135,22 +135,44 @@ def main():
         return
 
     print(f"  watchdog : 每 {CHECK_INTERVAL}s 检查,死了自动拉")
+    print(f"  hotreload: server.py mtime 变化自动重启(2026-09-25 全自动)")
+
+    # 2026-09-25:hot reload — 检测 server.py / __version__.py mtime 变化,自动 kill + 重启
+    # 让改代码后无需 user 手动操作
+    watched_files = [
+        os.path.join(WD, "server.py"),
+        os.path.join(WD, "__version__.py"),
+    ]
+    file_mtimes = {f: os.path.getmtime(f) for f in watched_files if os.path.isfile(f)}
 
     fail_streak = 0
     try:
         while True:
             time.sleep(CHECK_INTERVAL)
-            if is_alive(pid) and port_listening():
-                fail_streak = 0
-            else:
+            # 检查 hot reload
+            hot_reload = False
+            for f, old_mt in list(file_mtimes.items()):
+                if not os.path.isfile(f):
+                    continue
+                new_mt = os.path.getmtime(f)
+                if new_mt > old_mt:
+                    print(f"  [{time.strftime('%H:%M:%S')}] HOT RELOAD: {os.path.basename(f)} 改了,自动重启 server")
+                    hot_reload = True
+                    file_mtimes[f] = new_mt
+            # 常规健康检查
+            if not (is_alive(pid) and port_listening()):
                 fail_streak += 1
                 print(f"  [{time.strftime('%H:%M:%S')}] server pid={pid} 异常 (streak={fail_streak})")
-                if fail_streak >= 2:
-                    print(f"  → 重启 server")
-                    kill_existing()
-                    pid = spawn_server()
-                    print(f"  → new pid={pid}")
-                    fail_streak = 0
+            else:
+                fail_streak = 0
+            # 触发重启(hot reload 或 fail_streak >= 2)
+            if hot_reload or fail_streak >= 2:
+                reason = "hot reload" if hot_reload else f"fail_streak={fail_streak}"
+                print(f"  → 重启 server ({reason})")
+                kill_existing()
+                pid = spawn_server()
+                print(f"  → new pid={pid}")
+                fail_streak = 0
     except KeyboardInterrupt:
         print("  interrupted, leaving server running")
 
